@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+    
+    // Events collection
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+        (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+        (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+    
+    // Tasks collection
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+        (resource.data.assignedTo == request.auth.uid || 
+         resource.data.createdBy == request.auth.uid || 
+         isAdmin());
+      allow delete: if isAdmin();
+    }
+    
+    // Reminders collection
+    match /reminders/{reminderId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.sentBy == request.auth.uid || 
+         resource.data.sentTo == request.auth.uid || 
+         isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if false; // Reminders should not be updated
+      allow delete: if isAdmin();
+    }
+  }
+}
