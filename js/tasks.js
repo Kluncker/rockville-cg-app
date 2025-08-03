@@ -44,12 +44,6 @@ async function loadUserTasks() {
             tasksList.appendChild(taskCard);
         });
         
-        // Apply initial filter
-        const activeFilter = document.querySelector('.filter-chip.active');
-        if (activeFilter) {
-            filterTasks(activeFilter.dataset.filter);
-        }
-        
     } catch (error) {
         console.error('Error loading tasks:', error);
         tasksList.innerHTML = '<p class="error">Error loading tasks</p>';
