@@ -3,8 +3,15 @@
 let currentMonth = new Date();
 let calendarEvents = [];
 
+// Get global variables from app.js
+let db = window.db || null;
+let currentUser = window.currentUser || null;
+
 // Initialize calendar
 function initCalendar() {
+    // Update references to global variables
+    db = window.db || null;
+    currentUser = window.currentUser || null;
     renderCalendar();
     loadCalendarEvents();
     setupCalendarEventListeners();
@@ -125,7 +132,12 @@ function createCalendarDay(date, isOtherMonth) {
 
 // Load calendar events
 async function loadCalendarEvents() {
-    if (!db) return;
+    // Get current db reference
+    db = window.db || null;
+    if (!db) {
+        console.warn('Database not initialized yet');
+        return;
+    }
     
     try {
         const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);

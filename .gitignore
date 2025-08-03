@@ -28,3 +28,9 @@ build/
 # Temporary files
 *.tmp
 *.temp
+
+# User data
+scripts/allowedUsers.json
+scripts/populateUsers.js
+scripts/userManagement/
+*.private.json

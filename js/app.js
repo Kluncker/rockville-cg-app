@@ -14,6 +14,11 @@ const firebaseConfig = {
 let auth, db, currentUser;
 let availableUsers = []; // Store list of users for task assignment
 
+// Expose to global scope for other modules
+window.auth = null;
+window.db = null;
+window.currentUser = null;
+
 // Initialize Firebase
 function initializeFirebase() {
     if (firebaseConfig.apiKey) {
@@ -21,10 +26,15 @@ function initializeFirebase() {
         auth = firebase.auth();
         db = firebase.firestore();
         
+        // Expose to global scope
+        window.auth = auth;
+        window.db = db;
+        
         // Check authentication
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
+                window.currentUser = user;
                 await loadUserData();
                 initializeApp();
             } else {
@@ -216,6 +226,26 @@ function hideEventModal() {
     }
 }
 
+// Populate event form for editing
+function populateEventForm(eventData) {
+    if (!eventData) return;
+    
+    // Populate basic fields
+    document.getElementById('eventTitle').value = eventData.title || '';
+    document.getElementById('eventType').value = eventData.type || '';
+    document.getElementById('eventDate').value = eventData.date || '';
+    document.getElementById('eventTime').value = eventData.time || '';
+    document.getElementById('eventLocation').value = eventData.location || '';
+    document.getElementById('eventDescription').value = eventData.description || '';
+    
+    // Populate tasks if they exist
+    if (eventData.tasks && eventData.tasks.length > 0) {
+        eventData.tasks.forEach(task => {
+            addTaskInput(task);
+        });
+    }
+}
+
 // Add task input
 function addTaskInput(taskData = null) {
     const taskInputs = document.getElementById('taskInputs');
@@ -304,8 +334,9 @@ async function handleEventSubmit(e) {
     });
     
     try {
-        // Save to Firestore
-        await db.collection('events').add(formData);
+        // Save to Firestore and get the created event reference
+        const eventRef = await db.collection('events').add(formData);
+        const eventId = eventRef.id;
         
         // Create tasks
         for (const task of formData.tasks) {
@@ -314,7 +345,7 @@ async function handleEventSubmit(e) {
             await db.collection('tasks').add({
                 ...task,
                 assignedUserName: assignedUser ? assignedUser.displayName : 'Unknown',
-                eventId: formData.id,
+                eventId: eventId,
                 eventTitle: formData.title,
                 eventDate: formData.date,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -521,6 +552,10 @@ function getEventTypeLabel(type) {
     };
     return labels[type] || type;
 }
+
+// Expose functions to global scope for other modules
+window.showNotification = showNotification;
+window.showEventModal = showEventModal;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {

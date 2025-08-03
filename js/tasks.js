@@ -1,8 +1,19 @@
 // Tasks JavaScript
 
+// Get global variables from app.js
+let db = window.db || null;
+let currentUser = window.currentUser || null;
+
 // Load user tasks
 async function loadUserTasks() {
-    if (!currentUser || !db) return;
+    // Update references to global variables
+    db = window.db || null;
+    currentUser = window.currentUser || null;
+    
+    if (!currentUser || !db) {
+        console.warn('Database or current user not initialized yet');
+        return;
+    }
     
     const tasksList = document.getElementById('tasksList');
     if (!tasksList) return;
@@ -98,6 +109,15 @@ function formatStatus(status) {
 // Confirm task
 async function confirmTask(taskId) {
     if (!confirm('Confirm that you will complete this task?')) return;
+    
+    // Get current references
+    db = window.db || null;
+    currentUser = window.currentUser || null;
+    
+    if (!db || !currentUser) {
+        showNotification('Database not initialized', 'error');
+        return;
+    }
     
     try {
         await db.collection('tasks').doc(taskId).update({
@@ -222,6 +242,10 @@ document.head.appendChild(taskStyles);
 
 // Check for upcoming tasks and show reminders
 async function checkTaskReminders() {
+    // Get current references
+    db = window.db || null;
+    currentUser = window.currentUser || null;
+    
     if (!currentUser || !db) return;
     
     try {
