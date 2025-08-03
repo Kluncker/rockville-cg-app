@@ -114,13 +114,25 @@ async function signInWithGoogle() {
         const result = await auth.signInWithPopup(provider);
         const user = result.user;
         
-        // Save user to Firestore
-        await db.collection('users').doc(user.uid).set({
-            displayName: user.displayName,
-            email: user.email,
-            photoURL: user.photoURL,
-            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        // Check if user document exists
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        
+        if (!userDoc.exists) {
+            // Create new user document
+            await db.collection('users').doc(user.uid).set({
+                displayName: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL,
+                role: 'member', // Default role for new users
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } else {
+            // Update lastLogin for existing user
+            await db.collection('users').doc(user.uid).update({
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
         
         // Transition to dashboard
         transitionToDashboard();

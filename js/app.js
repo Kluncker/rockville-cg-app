@@ -12,6 +12,7 @@ const firebaseConfig = {
 
 // Global variables
 let auth, db, currentUser;
+let availableUsers = []; // Store list of users for task assignment
 
 // Initialize Firebase
 function initializeFirebase() {
@@ -50,12 +51,29 @@ async function loadUserData() {
             userName.textContent = currentUser.displayName || 'User';
         }
         
-        // Get user role from Firestore
+        // Get user role from Firestore or create user document if it doesn't exist
         try {
             const userDoc = await db.collection('users').doc(currentUser.uid).get();
             if (userDoc.exists) {
                 const userData = userDoc.data();
                 currentUser.role = userData.role || 'member';
+                
+                // Update lastLogin
+                await db.collection('users').doc(currentUser.uid).update({
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } else {
+                // Create user document for existing authenticated user
+                console.log('Creating user document for existing user:', currentUser.uid);
+                await db.collection('users').doc(currentUser.uid).set({
+                    displayName: currentUser.displayName || 'Unknown User',
+                    email: currentUser.email,
+                    photoURL: currentUser.photoURL || null,
+                    role: 'member', // Default role
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                currentUser.role = 'member';
             }
         } catch (error) {
             console.error('Error loading user data:', error);
@@ -70,6 +88,7 @@ function initializeApp() {
     loadTasks();
     loadUpcomingEvents();
     checkNotifications();
+    loadAvailableUsers(); // Load users for task assignment
 }
 
 // Setup event listeners
@@ -221,14 +240,37 @@ function addTaskInput(taskData = null) {
     taskInputs.appendChild(taskGroup);
 }
 
+// Load available users from Firestore
+async function loadAvailableUsers() {
+    try {
+        const usersSnapshot = await db.collection('users').get();
+        availableUsers = [];
+        
+        usersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            availableUsers.push({
+                uid: doc.id,
+                displayName: userData.displayName || 'Unknown User',
+                email: userData.email,
+                photoURL: userData.photoURL
+            });
+        });
+        
+        console.log('Loaded users:', availableUsers.length);
+    } catch (error) {
+        console.error('Error loading users:', error);
+    }
+}
+
 // Get available users for task assignment
 function getAvailableUsers() {
-    // TODO: Fetch from Firestore
-    return `
-        <option value="user1">John Doe</option>
-        <option value="user2">Jane Smith</option>
-        <option value="user3">Mike Johnson</option>
-    `;
+    if (availableUsers.length === 0) {
+        return '<option value="">No users available</option>';
+    }
+    
+    return availableUsers.map(user => 
+        `<option value="${user.uid}">${user.displayName}</option>`
+    ).join('');
 }
 
 // Handle event form submission
@@ -267,12 +309,16 @@ async function handleEventSubmit(e) {
         
         // Create tasks
         for (const task of formData.tasks) {
+            // Get assigned user's display name for the task
+            const assignedUser = availableUsers.find(u => u.uid === task.assignedTo);
             await db.collection('tasks').add({
                 ...task,
+                assignedUserName: assignedUser ? assignedUser.displayName : 'Unknown',
                 eventId: formData.id,
                 eventTitle: formData.title,
                 eventDate: formData.date,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                createdBy: currentUser.uid,
                 notificationSent: false
             });
         }
