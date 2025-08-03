@@ -1,12 +1,17 @@
 {
   "hosting": {
     "site": "rockville-cg-planning",
-    "public": "dist",
+    "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
-      "functions/**"
+      "functions/**",
+      "dist/**",
+      "scripts/**",
+      "vite.config.js",
+      "package.json",
+      "package-lock.json"
     ],
     "rewrites": [
       {
