@@ -43,6 +43,8 @@ body {
     box-shadow: var(--shadow-sm);
     z-index: 100;
     padding: 0.8rem 1.6rem;
+    /* Ensure dropdown is not clipped */
+    overflow: visible;
 }
 
 .header-content {
@@ -51,6 +53,7 @@ body {
     align-items: center;
     max-width: 1400px;
     margin: 0 auto;
+    position: relative;
 }
 
 .header-left, .header-right {
@@ -721,14 +724,16 @@ section::before {
 /* Dropdown Menu */
 .dropdown-menu {
     position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 2rem;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
     background: white;
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
     min-width: 200px;
-    z-index: 200;
+    z-index: 1000; /* Very high z-index */
     animation: fadeInScale 0.2s ease;
+    border: 1px solid var(--border-light);
 }
 
 /* Notification Dropdown */

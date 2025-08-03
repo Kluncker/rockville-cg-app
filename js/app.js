@@ -199,13 +199,19 @@ function setupEventListeners() {
     if (menuBtn && userDropdown) {
         menuBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            userDropdown.style.display = userDropdown.style.display === 'none' ? 'block' : 'none';
+            console.log('Menu button clicked'); // Debug log
+            const currentDisplay = userDropdown.style.display;
+            console.log('Current dropdown display:', currentDisplay); // Debug log
+            userDropdown.style.display = currentDisplay === 'none' || !currentDisplay ? 'block' : 'none';
+            console.log('New dropdown display:', userDropdown.style.display); // Debug log
             // Close notification dropdown when opening user menu
             const notificationDropdown = document.getElementById('notificationDropdown');
             if (notificationDropdown) {
                 notificationDropdown.style.display = 'none';
             }
         });
+    } else {
+        console.error('Menu button or dropdown not found:', { menuBtn, userDropdown }); // Debug log
     }
     
     // Close dropdowns when clicking outside
