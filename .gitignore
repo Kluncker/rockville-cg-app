@@ -28,9 +28,8 @@ build/
 # Temporary files
 *.tmp
 *.temp
+*.private.json
 
 # User data
 scripts/allowedUsers.json
-scripts/populateUsers.js
-scripts/userManagement/
-*.private.json
+scripts/serviceAccountKey.json

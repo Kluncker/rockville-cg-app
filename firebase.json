@@ -9,6 +9,10 @@
     ],
     "rewrites": [
       {
+        "source": "/__/firebase/functions/**",
+        "function": "checkUserAuthorization"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

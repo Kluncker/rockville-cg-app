@@ -19,6 +19,35 @@ window.auth = null;
 window.db = null;
 window.currentUser = null;
 
+// Check if email is allowed using Cloud Function
+async function isEmailAllowed(email) {
+    try {
+        console.log('🔍 [Dashboard] Checking if email is allowed:', email);
+        
+        // Call the Cloud Function
+        const checkUserAuthorization = firebase.functions().httpsCallable('checkUserAuthorization');
+        const result = await checkUserAuthorization();
+        
+        console.log('📡 [Dashboard] Authorization check result:', result.data);
+        
+        if (result.data.authorized) {
+            console.log('✅ [Dashboard] User authorized:', result.data.message);
+            return true;
+        } else {
+            console.log('❌ [Dashboard] User not authorized:', result.data.message);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ [Dashboard] Error checking authorization:', error);
+        console.error('Error details:', {
+            code: error.code,
+            message: error.message,
+            details: error.details
+        });
+        return false;
+    }
+}
+
 // Initialize Firebase
 function initializeFirebase() {
     if (firebaseConfig.apiKey) {
@@ -33,12 +62,30 @@ function initializeFirebase() {
         // Check authentication
         auth.onAuthStateChanged(async (user) => {
             if (user) {
+                console.log('🔐 User authenticated:', user.email);
+                
+                // Check if user is allowed
+                const isAllowed = await isEmailAllowed(user.email);
+                if (!isAllowed) {
+                    console.error('⛔ User not authorized!');
+                    showNotification('Access denied. Check console for details. Redirecting in 5 seconds...', 'error');
+                    
+                    // Add delay before redirecting to see errors
+                    setTimeout(async () => {
+                        // Sign out unauthorized user
+                        await auth.signOut();
+                        window.location.href = 'index.html';
+                    }, 5000); // 5 second delay
+                    return;
+                }
+                
                 currentUser = user;
                 window.currentUser = user;
                 await loadUserData();
                 initializeApp();
             } else {
                 // Redirect to login
+                console.log('🔒 No user authenticated, redirecting to login...');
                 window.location.href = 'index.html';
             }
         });

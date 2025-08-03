@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "vite": "^5.0.12"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0"
   }
 }
