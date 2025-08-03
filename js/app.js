@@ -702,6 +702,9 @@ function createPreviewEventCard(event) {
             minute: '2-digit'
         }) : 'All day';
     
+    // Check if user can delete this event
+    const showDeleteButton = canDeleteEvent(event);
+    
     card.innerHTML = `
         <div class="preview-event-header">
             <div>
@@ -717,15 +720,25 @@ function createPreviewEventCard(event) {
                     </div>
                 ` : ''}
             </div>
-            <span class="event-type-badge ${event.type}">${getEventTypeLabel(event.type)}</span>
+            <div class="preview-event-actions">
+                <span class="event-type-badge ${event.type}">${getEventTypeLabel(event.type)}</span>
+                ${showDeleteButton ? `
+                    <button class="delete-event-btn" onclick="event.stopPropagation(); deleteEvent('${event.id}')">
+                        <span class="material-icons">delete</span>
+                    </button>
+                ` : ''}
+            </div>
         </div>
         ${event.description ? `<p class="preview-event-description">${event.description}</p>` : ''}
     `;
     
     // Add click handler to edit event
-    card.addEventListener('click', () => {
-        hideEventPreviewModal();
-        showEventModal(null, event);
+    card.addEventListener('click', (e) => {
+        // Don't trigger edit if clicking on delete button
+        if (!e.target.closest('.delete-event-btn')) {
+            hideEventPreviewModal();
+            showEventModal(null, event);
+        }
     });
     
     return card;
@@ -895,9 +908,62 @@ function getEventTypeLabel(type) {
     return labels[type] || type;
 }
 
+// Check if current user is a leader
+function isLeader() {
+    return currentUser && currentUser.role === 'leader';
+}
+
+// Check if user can delete an event
+function canDeleteEvent(event) {
+    // User can delete if they created it OR if they're a leader
+    return (currentUser && currentUser.uid === event.createdBy) || isLeader();
+}
+
+// Delete event
+async function deleteEvent(eventId) {
+    if (!confirm('Are you sure you want to delete this event?')) {
+        return;
+    }
+    
+    try {
+        // Start a batch operation
+        const batch = db.batch();
+        
+        // Delete the event
+        const eventRef = db.collection('events').doc(eventId);
+        batch.delete(eventRef);
+        
+        // Delete all associated tasks
+        const tasksSnapshot = await db.collection('tasks')
+            .where('eventId', '==', eventId)
+            .get();
+        
+        tasksSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        // Commit the batch
+        await batch.commit();
+        
+        showNotification('Event deleted successfully', 'success');
+        
+        // Refresh the calendar and close the preview modal
+        hideEventPreviewModal();
+        loadCalendar();
+        loadUpcomingEvents();
+        
+    } catch (error) {
+        console.error('Error deleting event:', error);
+        showNotification('Error deleting event', 'error');
+    }
+}
+
 // Expose functions to global scope for other modules
 window.showNotification = showNotification;
 window.showEventModal = showEventModal;
+window.isLeader = isLeader;
+window.canDeleteEvent = canDeleteEvent;
+window.deleteEvent = deleteEvent;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
