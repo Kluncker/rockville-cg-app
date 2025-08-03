@@ -181,7 +181,7 @@ body {
 
 /* Main Content */
 .main-content {
-    padding: 2rem;
+    padding: 1.5rem;
     max-width: 1400px;
     margin: 0 auto;
 }
@@ -197,7 +197,7 @@ section {
     background: var(--card-bg);
     backdrop-filter: blur(20px);
     border-radius: 20px;
-    padding: 2rem;
+    padding: 1.5rem;
     box-shadow: var(--shadow-md);
     border: 1px solid rgba(255, 255, 255, 0.6);
     position: relative;
@@ -234,21 +234,21 @@ section::before {
     align-items: center;
     justify-content: center;
     gap: 2rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
 
 /* Event Legend */
 .event-legend-container {
-    margin-top: 1.5rem;
+    margin-top: 1rem;
     position: relative;
 }
 
 .event-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 0.75rem;
     justify-content: center;
-    padding: 1rem;
+    padding: 0.75rem;
     background: white;
     border-radius: 12px;
     border: 1px solid var(--border-light);
@@ -257,14 +257,14 @@ section::before {
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
+    gap: 0.4rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
 }
 
 .legend-color {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 3px;
 }
 
@@ -284,42 +284,44 @@ section::before {
 .calendar-container {
     background: white;
     border-radius: 16px;
-    padding: 1.5rem;
+    padding: 1rem;
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .calendar-header {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    gap: 2px;
+    margin-bottom: 0.5rem;
 }
 
 .calendar-day-name {
     text-align: center;
     font-weight: 600;
     color: var(--text-secondary);
-    font-size: 0.875rem;
-    padding: 0.5rem;
+    font-size: 0.8rem;
+    padding: 0.25rem;
 }
 
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 0.5rem;
+    gap: 2px;
 }
 
 .calendar-day {
-    aspect-ratio: 1;
-    padding: 0.5rem;
-    border-radius: 12px;
+    min-height: 80px;
+    height: 90px;
+    padding: 0.4rem;
+    border-radius: 8px;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
     background: var(--content-bg);
+    overflow: hidden;
 }
 
 .calendar-day:hover {
@@ -343,35 +345,70 @@ section::before {
 
 .calendar-day.today {
     background: linear-gradient(135deg, var(--primary-color), #7C3AED);
+}
+
+.calendar-day.today .calendar-day-number {
     color: white;
     font-weight: 600;
 }
 
 .calendar-day-number {
-    font-size: 0.9rem;
-    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+    margin-bottom: 0.2rem;
+    color: var(--text-primary);
+    z-index: 1;
+    align-self: flex-start;
 }
 
 .calendar-day-events {
     display: flex;
+    flex-direction: column;
     gap: 2px;
-    flex-wrap: wrap;
-    justify-content: center;
+    width: 100%;
+    margin-top: 0.2rem;
 }
 
-.event-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
+.event-block {
+    width: 100%;
+    height: 18px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    font-size: 0.65rem;
+    color: white;
+    font-weight: 500;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.event-block:hover {
+    transform: translateX(2px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Event Type Indicators */
-.event-dot.bible-study { background: var(--bible-study); }
-.event-dot.mens-fellowship { background: var(--mens-fellowship); }
-.event-dot.womens-fellowship { background: var(--womens-fellowship); }
-.event-dot.sunday-service { background: var(--sunday-service); }
-.event-dot.community { background: var(--community); }
+.event-block.bible-study { background: var(--bible-study); }
+.event-block.mens-fellowship { background: var(--mens-fellowship); }
+.event-block.womens-fellowship { background: var(--womens-fellowship); }
+.event-block.sunday-service { background: var(--sunday-service); }
+.event-block.community { background: var(--community); }
+
+/* Ensure readability on today's gradient background */
+.calendar-day.today .event-block {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.event-more {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: 2px;
+    font-weight: 500;
+}
 
 /* Task Filters */
 .task-filters {
@@ -983,15 +1020,72 @@ section::before {
     }
     
     .main-content {
-        padding: 1rem;
+        padding: 0.5rem;
     }
     
     section {
-        padding: 1.5rem;
+        padding: 1rem;
+        border-radius: 16px;
+    }
+    
+    .calendar-nav {
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .calendar-container {
+        padding: 0.5rem;
+    }
+    
+    .calendar-header {
+        gap: 1px;
+        margin-bottom: 0.25rem;
+    }
+    
+    .calendar-day-name {
+        font-size: 0.7rem;
+        padding: 0.2rem;
+    }
+    
+    .calendar-grid {
+        gap: 1px;
     }
     
     .calendar-day {
-        font-size: 0.8rem;
+        min-height: 60px;
+        height: 70px;
+        padding: 0.3rem;
+        border-radius: 6px;
+    }
+    
+    .calendar-day-number {
+        font-size: 0.75rem;
+    }
+    
+    .event-block {
+        height: 15px;
+        font-size: 0.6rem;
+        padding: 0 3px;
+    }
+    
+    .event-legend-container {
+        margin-top: 0.75rem;
+    }
+    
+    .event-legend {
+        gap: 0.5rem;
+        padding: 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .legend-item {
+        gap: 0.3rem;
+        font-size: 0.7rem;
+    }
+    
+    .legend-color {
+        width: 8px;
+        height: 8px;
     }
     
     .form-row {

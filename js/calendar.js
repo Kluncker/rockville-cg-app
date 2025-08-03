@@ -193,7 +193,7 @@ function updateCalendarEvents() {
         eventsByDate[event.date].push(event);
     });
     
-    // Add event dots to calendar days
+    // Add event blocks to calendar days
     Object.entries(eventsByDate).forEach(([date, events]) => {
         const dayElement = document.querySelector(`[data-date="${date}"]`);
         if (dayElement) {
@@ -202,12 +202,13 @@ function updateCalendarEvents() {
             
             const eventsContainer = dayElement.querySelector('.calendar-day-events');
             
-            // Show up to 3 event dots
+            // Show up to 3 event blocks
             events.slice(0, 3).forEach(event => {
-                const dot = document.createElement('div');
-                dot.className = `event-dot ${event.type}`;
-                dot.title = event.title;
-                eventsContainer.appendChild(dot);
+                const block = document.createElement('div');
+                block.className = `event-block ${event.type}`;
+                block.textContent = event.title; // Display event title
+                block.title = event.title; // Show full title on hover
+                eventsContainer.appendChild(block);
             });
             
             // If more than 3 events, show a "+X" indicator
@@ -215,8 +216,6 @@ function updateCalendarEvents() {
                 const more = document.createElement('div');
                 more.className = 'event-more';
                 more.textContent = `+${events.length - 3}`;
-                more.style.fontSize = '0.7rem';
-                more.style.color = 'var(--text-secondary)';
                 eventsContainer.appendChild(more);
             }
         }
