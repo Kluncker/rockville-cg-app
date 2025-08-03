@@ -296,15 +296,23 @@ function showEventModal(date = null, eventData = null) {
         document.getElementById('taskInputs').innerHTML = '';
         
         if (eventData) {
-            // Edit mode
+            // Edit mode - check permissions first
+            if (!canEditEvent(eventData)) {
+                showNotification('You do not have permission to edit this event', 'error');
+                return;
+            }
             modalTitle.textContent = 'Edit Event';
             populateEventForm(eventData);
+            // Store event ID for update
+            form.dataset.eventId = eventData.id;
         } else {
             // Add mode
             modalTitle.textContent = 'Add New Event';
             if (date) {
                 document.getElementById('eventDate').value = date;
             }
+            // Clear event ID to indicate new event
+            delete form.dataset.eventId;
         }
         
         modal.style.display = 'flex';
@@ -406,6 +414,10 @@ function getAvailableUsers() {
 async function handleEventSubmit(e) {
     e.preventDefault();
     
+    const form = e.target;
+    const eventId = form.dataset.eventId; // Get event ID if editing
+    const isEditing = !!eventId;
+    
     const formData = {
         title: document.getElementById('eventTitle').value,
         type: document.getElementById('eventType').value,
@@ -413,10 +425,18 @@ async function handleEventSubmit(e) {
         time: document.getElementById('eventTime').value,
         location: document.getElementById('eventLocation').value,
         description: document.getElementById('eventDescription').value,
-        createdBy: currentUser.uid,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         tasks: []
     };
+    
+    // Only add createdBy and createdAt for new events
+    if (!isEditing) {
+        formData.createdBy = currentUser.uid;
+        formData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    } else {
+        // For updates, add an updatedAt timestamp
+        formData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+        formData.updatedBy = currentUser.uid;
+    }
     
     // Get tasks
     const taskGroups = document.querySelectorAll('.task-input-group');
@@ -433,18 +453,37 @@ async function handleEventSubmit(e) {
     });
     
     try {
-        // Save to Firestore and get the created event reference
-        const eventRef = await db.collection('events').add(formData);
-        const eventId = eventRef.id;
+        let eventIdToUse = eventId;
         
-        // Create tasks
+        if (isEditing) {
+            // Update existing event
+            await db.collection('events').doc(eventId).update(formData);
+            
+            // Delete existing tasks for this event
+            const existingTasksSnapshot = await db.collection('tasks')
+                .where('eventId', '==', eventId)
+                .get();
+            
+            const batch = db.batch();
+            existingTasksSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+            
+        } else {
+            // Create new event
+            const eventRef = await db.collection('events').add(formData);
+            eventIdToUse = eventRef.id;
+        }
+        
+        // Create tasks (for both new and updated events)
         for (const task of formData.tasks) {
             // Get assigned user's display name for the task
             const assignedUser = availableUsers.find(u => u.uid === task.assignedTo);
             await db.collection('tasks').add({
                 ...task,
                 assignedUserName: assignedUser ? assignedUser.displayName : 'Unknown',
-                eventId: eventId,
+                eventId: eventIdToUse,
                 eventTitle: formData.title,
                 eventDate: formData.date,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -453,16 +492,17 @@ async function handleEventSubmit(e) {
             });
         }
         
-        showNotification('Event created successfully!', 'success');
+        showNotification(isEditing ? 'Event updated successfully!' : 'Event created successfully!', 'success');
         hideEventModal();
         
         // Reload data
         loadCalendar();
         loadUpcomingEvents();
+        loadTasks();
         
     } catch (error) {
-        console.error('Error creating event:', error);
-        showNotification('Error creating event', 'error');
+        console.error(isEditing ? 'Error updating event:' : 'Error creating event:', error);
+        showNotification(isEditing ? 'Error updating event' : 'Error creating event', 'error');
     }
 }
 
@@ -925,6 +965,24 @@ function canDeleteEvent(event) {
     return (currentUser && currentUser.uid === event.createdBy) || isLeader();
 }
 
+// Check if user can edit an event
+function canEditEvent(event) {
+    if (!currentUser || !event) return false;
+    
+    // Check if user is the creator
+    if (currentUser.uid === event.createdBy) return true;
+    
+    // Check if user is a leader
+    if (isLeader()) return true;
+    
+    // Check if user has a task assigned in this event
+    if (event.tasks && event.tasks.length > 0) {
+        return event.tasks.some(task => task.assignedTo === currentUser.uid);
+    }
+    
+    return false;
+}
+
 // Delete event
 async function deleteEvent(eventId) {
     if (!confirm('Are you sure you want to delete this event?')) {
@@ -969,6 +1027,7 @@ window.showNotification = showNotification;
 window.showEventModal = showEventModal;
 window.isLeader = isLeader;
 window.canDeleteEvent = canDeleteEvent;
+window.canEditEvent = canEditEvent;
 window.deleteEvent = deleteEvent;
 
 // Initialize on DOM load
