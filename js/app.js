@@ -156,6 +156,15 @@ function setupEventListeners() {
         addEventBtn.addEventListener('click', () => showEventModal());
     }
     
+    // Notification bell
+    const notificationBtn = document.getElementById('notificationBtn');
+    if (notificationBtn) {
+        notificationBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleNotificationDropdown();
+        });
+    }
+    
     // User menu
     const menuBtn = document.getElementById('menuBtn');
     const userDropdown = document.getElementById('userDropdown');
@@ -163,13 +172,22 @@ function setupEventListeners() {
         menuBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             userDropdown.style.display = userDropdown.style.display === 'none' ? 'block' : 'none';
+            // Close notification dropdown when opening user menu
+            const notificationDropdown = document.getElementById('notificationDropdown');
+            if (notificationDropdown) {
+                notificationDropdown.style.display = 'none';
+            }
         });
     }
     
-    // Close dropdown when clicking outside
+    // Close dropdowns when clicking outside
     document.addEventListener('click', () => {
         if (userDropdown) {
             userDropdown.style.display = 'none';
+        }
+        const notificationDropdown = document.getElementById('notificationDropdown');
+        if (notificationDropdown) {
+            notificationDropdown.style.display = 'none';
         }
     });
     
@@ -425,7 +443,7 @@ async function checkNotifications() {
         
         const tasksSnapshot = await db.collection('tasks')
             .where('assignedTo', '==', currentUser.uid)
-            .where('notificationSent', '==', false)
+            .where('status', '==', 'pending')
             .where('eventDate', '<=', threeWeeksFromNow.toISOString().split('T')[0])
             .get();
         
@@ -436,10 +454,167 @@ async function checkNotifications() {
             badge.style.display = notificationCount > 0 ? 'block' : 'none';
         }
         
+        // Store notifications for dropdown
+        window.pendingNotifications = [];
+        tasksSnapshot.forEach(doc => {
+            const task = { id: doc.id, ...doc.data() };
+            window.pendingNotifications.push(task);
+        });
+        
     } catch (error) {
         console.error('Error checking notifications:', error);
     }
 }
+
+// Toggle notification dropdown
+function toggleNotificationDropdown() {
+    let notificationDropdown = document.getElementById('notificationDropdown');
+    
+    // Create dropdown if it doesn't exist
+    if (!notificationDropdown) {
+        notificationDropdown = document.createElement('div');
+        notificationDropdown.id = 'notificationDropdown';
+        notificationDropdown.className = 'notification-dropdown';
+        
+        // Position it relative to the notification button
+        const notificationBtn = document.getElementById('notificationBtn');
+        const headerContent = document.querySelector('.header-content');
+        headerContent.appendChild(notificationDropdown);
+    }
+    
+    // Toggle visibility
+    if (notificationDropdown.style.display === 'none' || !notificationDropdown.style.display) {
+        // Close user dropdown if open
+        const userDropdown = document.getElementById('userDropdown');
+        if (userDropdown) {
+            userDropdown.style.display = 'none';
+        }
+        
+        // Show notification dropdown
+        displayNotifications(notificationDropdown);
+        notificationDropdown.style.display = 'block';
+    } else {
+        notificationDropdown.style.display = 'none';
+    }
+}
+
+// Display notifications in dropdown
+function displayNotifications(dropdown) {
+    dropdown.innerHTML = '';
+    
+    // Add header
+    const header = document.createElement('div');
+    header.className = 'notification-header';
+    header.innerHTML = `
+        <h4>Notifications</h4>
+        ${window.pendingNotifications && window.pendingNotifications.length > 0 ? 
+            '<button class="clear-all-btn" onclick="clearAllNotifications()">Clear All</button>' : ''}
+    `;
+    dropdown.appendChild(header);
+    
+    // Add notification items
+    if (window.pendingNotifications && window.pendingNotifications.length > 0) {
+        const notificationList = document.createElement('div');
+        notificationList.className = 'notification-list';
+        
+        window.pendingNotifications.forEach(task => {
+            const notificationItem = createNotificationItem(task);
+            notificationList.appendChild(notificationItem);
+        });
+        
+        dropdown.appendChild(notificationList);
+    } else {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'notification-empty';
+        emptyState.innerHTML = `
+            <span class="material-icons">notifications_none</span>
+            <p>No new notifications</p>
+        `;
+        dropdown.appendChild(emptyState);
+    }
+}
+
+// Create notification item
+function createNotificationItem(task) {
+    const item = document.createElement('div');
+    item.className = 'notification-item';
+    
+    const eventDate = new Date(task.eventDate);
+    const daysUntil = Math.ceil((eventDate - new Date()) / (1000 * 60 * 60 * 24));
+    
+    item.innerHTML = `
+        <div class="notification-content">
+            <h5>${task.title}</h5>
+            <p class="notification-event">${task.eventTitle}</p>
+            <p class="notification-date">
+                <span class="material-icons">schedule</span>
+                ${daysUntil > 0 ? `Due in ${daysUntil} days` : 'Due today'}
+            </p>
+        </div>
+        <button class="notification-action" onclick="confirmTask('${task.id}')">
+            <span class="material-icons">check</span>
+        </button>
+    `;
+    
+    return item;
+}
+
+// Confirm task
+async function confirmTask(taskId) {
+    try {
+        await db.collection('tasks').doc(taskId).update({
+            status: 'confirmed',
+            confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        showNotification('Task confirmed!', 'success');
+        
+        // Refresh notifications
+        await checkNotifications();
+        const dropdown = document.getElementById('notificationDropdown');
+        if (dropdown && dropdown.style.display === 'block') {
+            displayNotifications(dropdown);
+        }
+        
+        // Refresh tasks list
+        loadTasks();
+        
+    } catch (error) {
+        console.error('Error confirming task:', error);
+        showNotification('Error confirming task', 'error');
+    }
+}
+
+// Clear all notifications
+async function clearAllNotifications() {
+    try {
+        const batch = db.batch();
+        
+        window.pendingNotifications.forEach(task => {
+            const taskRef = db.collection('tasks').doc(task.id);
+            batch.update(taskRef, { notificationSent: true });
+        });
+        
+        await batch.commit();
+        
+        showNotification('All notifications cleared', 'success');
+        
+        // Refresh
+        await checkNotifications();
+        const dropdown = document.getElementById('notificationDropdown');
+        if (dropdown) {
+            displayNotifications(dropdown);
+        }
+        
+    } catch (error) {
+        console.error('Error clearing notifications:', error);
+        showNotification('Error clearing notifications', 'error');
+    }
+}
+
+// Expose functions to global scope
+window.confirmTask = confirmTask;
+window.clearAllNotifications = clearAllNotifications;
 
 // Show notification
 function showNotification(message, type = 'info') {
