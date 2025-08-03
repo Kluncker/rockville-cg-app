@@ -156,6 +156,34 @@ function setupEventListeners() {
         addEventBtn.addEventListener('click', () => showEventModal());
     }
     
+    // Event legend is now always visible, no toggle needed
+    
+    // Event Preview Modal controls
+    const closePreviewModal = document.getElementById('closePreviewModal');
+    const addEventFromPreview = document.getElementById('addEventFromPreview');
+    const eventPreviewModal = document.getElementById('eventPreviewModal');
+    
+    if (closePreviewModal) {
+        closePreviewModal.addEventListener('click', () => hideEventPreviewModal());
+    }
+    
+    if (addEventFromPreview) {
+        addEventFromPreview.addEventListener('click', () => {
+            const previewDate = document.getElementById('previewDate').dataset.date;
+            hideEventPreviewModal();
+            showEventModal(previewDate);
+        });
+    }
+    
+    // Close preview modal on background click
+    if (eventPreviewModal) {
+        eventPreviewModal.addEventListener('click', (e) => {
+            if (e.target === eventPreviewModal) {
+                hideEventPreviewModal();
+            }
+        });
+    }
+    
     // Notification bell
     const notificationBtn = document.getElementById('notificationBtn');
     if (notificationBtn) {
@@ -612,9 +640,101 @@ async function clearAllNotifications() {
     }
 }
 
+// Show event preview modal
+function showEventPreviewModal(date, events) {
+    const modal = document.getElementById('eventPreviewModal');
+    const previewDate = document.getElementById('previewDate');
+    const eventPreviewList = document.getElementById('eventPreviewList');
+    
+    if (!modal || !previewDate || !eventPreviewList) return;
+    
+    // Format date for display
+    const dateObj = new Date(date + 'T00:00:00');
+    const formattedDate = dateObj.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    
+    previewDate.textContent = formattedDate;
+    previewDate.dataset.date = date;
+    
+    // Clear previous events
+    eventPreviewList.innerHTML = '';
+    
+    // Sort events by time
+    events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
+    
+    // Create event cards
+    events.forEach(event => {
+        const eventCard = createPreviewEventCard(event);
+        eventPreviewList.appendChild(eventCard);
+    });
+    
+    // Show modal
+    modal.style.display = 'flex';
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+}
+
+// Hide event preview modal
+function hideEventPreviewModal() {
+    const modal = document.getElementById('eventPreviewModal');
+    if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
+}
+
+// Create preview event card
+function createPreviewEventCard(event) {
+    const card = document.createElement('div');
+    card.className = `preview-event-card ${event.type}`;
+    
+    // Format time
+    const eventTime = event.time ? 
+        new Date('1970-01-01T' + event.time).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit'
+        }) : 'All day';
+    
+    card.innerHTML = `
+        <div class="preview-event-header">
+            <div>
+                <h3 class="preview-event-title">${event.title}</h3>
+                <div class="preview-event-time">
+                    <span class="material-icons">schedule</span>
+                    <span>${eventTime}</span>
+                </div>
+                ${event.location ? `
+                    <div class="preview-event-location">
+                        <span class="material-icons">location_on</span>
+                        <span>${event.location}</span>
+                    </div>
+                ` : ''}
+            </div>
+            <span class="event-type-badge ${event.type}">${getEventTypeLabel(event.type)}</span>
+        </div>
+        ${event.description ? `<p class="preview-event-description">${event.description}</p>` : ''}
+    `;
+    
+    // Add click handler to edit event
+    card.addEventListener('click', () => {
+        hideEventPreviewModal();
+        showEventModal(null, event);
+    });
+    
+    return card;
+}
+
 // Expose functions to global scope
 window.confirmTask = confirmTask;
 window.clearAllNotifications = clearAllNotifications;
+window.showEventPreviewModal = showEventPreviewModal;
 
 // Show notification
 function showNotification(message, type = 'info') {
@@ -769,7 +889,7 @@ function getEventTypeLabel(type) {
         'bible-study': 'Bible Study',
         'mens-fellowship': "Men's Fellowship",
         'womens-fellowship': "Women's Fellowship",
-        'sunday-service': 'Sunday Service',
+        'sunday-service': 'Sunday Service Hosting',
         'community': 'Community Event'
     };
     return labels[type] || type;

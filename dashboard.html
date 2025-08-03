@@ -78,6 +78,32 @@
                         <!-- Calendar days will be generated here -->
                     </div>
                 </div>
+                
+                <!-- Event Type Legend -->
+                <div class="event-legend-container">
+                    <div class="event-legend" id="eventLegend">
+                        <div class="legend-item">
+                            <span class="legend-color bible-study"></span>
+                            <span>Bible Study</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color mens-fellowship"></span>
+                            <span>Men's Fellowship</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color womens-fellowship"></span>
+                            <span>Women's Fellowship</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color sunday-service"></span>
+                            <span>Sunday Service Hosting</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color community"></span>
+                            <span>Community Event</span>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- Tasks Section -->
@@ -106,6 +132,29 @@
         </div>
     </main>
 
+    <!-- Event Preview Modal -->
+    <div id="eventPreviewModal" class="modal" style="display: none;">
+        <div class="modal-content event-preview-modal">
+            <div class="modal-header">
+                <h3 id="previewDate" class="preview-date"></h3>
+                <button class="icon-button" id="closePreviewModal">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="event-preview-content">
+                <div id="eventPreviewList" class="event-preview-list">
+                    <!-- Events will be displayed here -->
+                </div>
+                <div class="preview-actions">
+                    <button class="primary-button" id="addEventFromPreview">
+                        <span class="material-icons">add</span>
+                        Add New Event
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Event Modal -->
     <div id="eventModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -128,7 +177,7 @@
                         <option value="bible-study">Bible Study</option>
                         <option value="mens-fellowship">Men's Fellowship</option>
                         <option value="womens-fellowship">Women's Fellowship</option>
-                        <option value="sunday-service">Sunday Service</option>
+                        <option value="sunday-service">Sunday Service Hosting</option>
                         <option value="community">Community Event</option>
                     </select>
                 </div>

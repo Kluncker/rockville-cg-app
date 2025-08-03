@@ -123,11 +123,24 @@ function createCalendarDay(date, isOtherMonth) {
     // Add click handler
     dayElement.addEventListener('click', () => {
         if (!isOtherMonth) {
-            showEventModal(formatDateString(date));
+            handleCalendarDayClick(formatDateString(date));
         }
     });
     
     return dayElement;
+}
+
+// Handle calendar day click
+function handleCalendarDayClick(date) {
+    const eventsForDate = calendarEvents.filter(event => event.date === date);
+    
+    if (eventsForDate.length > 0) {
+        // Show event preview modal if there are events
+        showEventPreviewModal(date, eventsForDate);
+    } else {
+        // Show create event modal if no events
+        showEventModal(date);
+    }
 }
 
 // Load calendar events
@@ -184,6 +197,9 @@ function updateCalendarEvents() {
     Object.entries(eventsByDate).forEach(([date, events]) => {
         const dayElement = document.querySelector(`[data-date="${date}"]`);
         if (dayElement) {
+            // Add has-events class for styling
+            dayElement.classList.add('has-events');
+            
             const eventsContainer = dayElement.querySelector('.calendar-day-events');
             
             // Show up to 3 event dots
