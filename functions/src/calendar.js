@@ -3,6 +3,11 @@
 const { google } = require("googleapis");
 const functions = require("firebase-functions");
 
+// Get calendar ID from environment or config
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 
+                    functions.config().google?.calendar_id || 
+                    "primary";
+
 // Initialize calendar client
 function getCalendarClient() {
     // Use Application Default Credentials (ADC)
@@ -48,7 +53,7 @@ async function createCalendarEvent(eventData, attendeeEmails) {
     
     try {
         const response = await calendar.events.insert({
-            calendarId: functions.config().google?.calendar_id || "primary",
+            calendarId: CALENDAR_ID,
             resource: calendarEvent,
             sendUpdates: "all" // Send invitations to attendees
         });
@@ -93,7 +98,7 @@ async function updateCalendarEvent(calendarEventId, eventData, attendeeEmails) {
     
     try {
         const response = await calendar.events.update({
-            calendarId: functions.config().google?.calendar_id || "primary",
+            calendarId: CALENDAR_ID,
             eventId: calendarEventId,
             resource: calendarEvent,
             sendUpdates: "all"
@@ -118,7 +123,7 @@ async function deleteCalendarEvent(calendarEventId) {
     
     try {
         await calendar.events.delete({
-            calendarId: functions.config().google?.calendar_id || "primary",
+            calendarId: CALENDAR_ID,
             eventId: calendarEventId,
             sendUpdates: "all"
         });
@@ -143,7 +148,7 @@ async function checkCalendarDiscrepancies(firebaseEvent) {
     
     try {
         const response = await calendar.events.get({
-            calendarId: functions.config().google?.calendar_id || "primary",
+            calendarId: CALENDAR_ID,
             eventId: firebaseEvent.googleCalendarEventId
         });
         

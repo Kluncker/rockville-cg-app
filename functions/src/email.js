@@ -5,7 +5,12 @@ const admin = require("firebase-admin");
 const functions = require("firebase-functions");
 
 // Initialize SendGrid
-sgMail.setApiKey(functions.config().sendgrid?.api_key || "");
+// Use environment variable as fallback when config is unavailable
+sgMail.setApiKey(
+    process.env.SENDGRID_API_KEY || 
+    functions.config().sendgrid?.api_key || 
+    ""
+);
 
 // Email templates
 const emailTemplates = {
@@ -111,6 +116,17 @@ async function sendDiscrepancyAlert(event, discrepancies, recipients) {
 async function sendEventCreatedEmail(event, recipients) {
     const template = emailTemplates.eventCreated;
     
+    // Debug logging
+    console.log("Attempting to send event created email:");
+    console.log("Recipients:", recipients);
+    console.log("Number of recipients:", recipients.length);
+    
+    // Check if recipients array is empty
+    if (!recipients || recipients.length === 0) {
+        console.error("No recipients provided for event created email");
+        return { success: false, error: "No recipients provided" };
+    }
+    
     const msg = {
         to: recipients,
         from: {
@@ -127,6 +143,9 @@ async function sendEventCreatedEmail(event, recipients) {
         return { success: true };
     } catch (error) {
         console.error("Error sending event created email:", error);
+        if (error.response) {
+            console.error("SendGrid error response:", JSON.stringify(error.response.body, null, 2));
+        }
         return { success: false, error: error.message };
     }
 }
