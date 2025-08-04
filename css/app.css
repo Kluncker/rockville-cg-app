@@ -1105,6 +1105,91 @@ section::before {
     color: var(--text-secondary);
 }
 
+/* Calendar Sync Styles */
+.calendar-sync-status {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.calendar-sync-status.synced {
+    color: #4caf50;
+}
+
+.calendar-sync-status.has-discrepancy {
+    color: #ff9800;
+}
+
+.calendar-sync-status .material-icons {
+    font-size: 18px;
+}
+
+.calendar-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.calendar-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.create-calendar-btn:hover {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4caf50;
+}
+
+.sync-calendar-btn:hover {
+    background: rgba(255, 152, 0, 0.1);
+    color: #ff9800;
+}
+
+.view-calendar-btn:hover {
+    background: rgba(33, 150, 243, 0.1);
+    color: #2196f3;
+}
+
+.calendar-btn .material-icons {
+    font-size: 20px;
+}
+
+.discrepancy-details {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 152, 0, 0.1);
+    border-radius: 8px;
+    border-left: 3px solid #ff9800;
+}
+
+.discrepancy-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ff9800;
+    margin-bottom: 0.5rem;
+}
+
+.discrepancy-details ul {
+    margin: 0;
+    padding-left: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.discrepancy-details li {
+    margin-bottom: 0.25rem;
+}
+
 /* Animations */
 @keyframes fadeInScale {
     from {

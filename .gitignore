@@ -34,3 +34,4 @@ build/
 scripts/allowedUsers.json
 scripts/serviceAccountKey.json
 scripts/update_user_gender.py
+scripts/test_sendgrid.js

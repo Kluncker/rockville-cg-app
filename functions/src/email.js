@@ -1,15 +1,16 @@
 // SendGrid Email Integration Functions
 
-const sgMail = require('@sendgrid/mail');
-const admin = require('firebase-admin');
+const sgMail = require("@sendgrid/mail");
+const admin = require("firebase-admin");
+const functions = require("firebase-functions");
 
 // Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY || '');
+sgMail.setApiKey(functions.config().sendgrid?.api_key || "");
 
 // Email templates
 const emailTemplates = {
     discrepancyAlert: {
-        subject: 'Calendar Sync Issue - Action Required',
+        subject: "Calendar Sync Issue - Action Required",
         generateHtml: (eventTitle, discrepancies) => `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #ff5252;">Calendar Sync Issue Detected</h2>
@@ -19,7 +20,7 @@ const emailTemplates = {
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <h4>Discrepancies Found:</h4>
                     <ul>
-                        ${discrepancies.map(d => `<li>${d}</li>`).join('')}
+                        ${discrepancies.map(d => `<li>${d}</li>`).join("")}
                     </ul>
                 </div>
                 
@@ -33,7 +34,7 @@ const emailTemplates = {
     },
     
     eventCreated: {
-        subject: 'New Event Created - [EVENT_TITLE]',
+        subject: "New Event Created - [EVENT_TITLE]",
         generateHtml: (event) => `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #0b57d0;">New Event Created</h2>
@@ -41,9 +42,9 @@ const emailTemplates = {
                 
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <p><strong>Date:</strong> ${new Date(event.date).toLocaleDateString()}</p>
-                    <p><strong>Time:</strong> ${event.time || 'TBD'}</p>
-                    <p><strong>Location:</strong> ${event.location || 'TBD'}</p>
-                    ${event.description ? `<p><strong>Description:</strong> ${event.description}</p>` : ''}
+                    <p><strong>Time:</strong> ${event.time || "TBD"}</p>
+                    <p><strong>Location:</strong> ${event.location || "TBD"}</p>
+                    ${event.description ? `<p><strong>Description:</strong> ${event.description}</p>` : ""}
                 </div>
                 
                 <p>A calendar invitation has been sent to your email. Please check your calendar for more details.</p>
@@ -56,7 +57,7 @@ const emailTemplates = {
     },
     
     locationChange: {
-        subject: 'Location Change - [EVENT_TITLE]',
+        subject: "Location Change - [EVENT_TITLE]",
         generateHtml: (event, oldLocation) => `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #ff9800;">Event Location Changed</h2>
@@ -69,7 +70,7 @@ const emailTemplates = {
                 
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <p><strong>Date:</strong> ${new Date(event.date).toLocaleDateString()}</p>
-                    <p><strong>Time:</strong> ${event.time || 'TBD'}</p>
+                    <p><strong>Time:</strong> ${event.time || "TBD"}</p>
                 </div>
                 
                 <p>Please note the location change. Your calendar has been updated automatically.</p>
@@ -89,8 +90,8 @@ async function sendDiscrepancyAlert(event, discrepancies, recipients) {
     const msg = {
         to: recipients,
         from: {
-            email: 'noreply@mosaic-rockville-cg.com',
-            name: 'Rockville CG App'
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
         },
         subject: template.subject,
         html: template.generateHtml(event.title, discrepancies)
@@ -98,10 +99,10 @@ async function sendDiscrepancyAlert(event, discrepancies, recipients) {
     
     try {
         await sgMail.sendMultiple(msg);
-        console.log('Discrepancy alert sent to:', recipients);
+        console.log("Discrepancy alert sent to:", recipients);
         return { success: true };
     } catch (error) {
-        console.error('Error sending discrepancy alert:', error);
+        console.error("Error sending discrepancy alert:", error);
         return { success: false, error: error.message };
     }
 }
@@ -113,19 +114,19 @@ async function sendEventCreatedEmail(event, recipients) {
     const msg = {
         to: recipients,
         from: {
-            email: 'noreply@mosaic-rockville-cg.com',
-            name: 'Rockville CG App'
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
         },
-        subject: template.subject.replace('[EVENT_TITLE]', event.title),
+        subject: template.subject.replace("[EVENT_TITLE]", event.title),
         html: template.generateHtml(event)
     };
     
     try {
         await sgMail.sendMultiple(msg);
-        console.log('Event created email sent to:', recipients.length, 'recipients');
+        console.log("Event created email sent to:", recipients.length, "recipients");
         return { success: true };
     } catch (error) {
-        console.error('Error sending event created email:', error);
+        console.error("Error sending event created email:", error);
         return { success: false, error: error.message };
     }
 }
@@ -137,19 +138,19 @@ async function sendLocationChangeEmail(event, oldLocation, recipients) {
     const msg = {
         to: recipients,
         from: {
-            email: 'noreply@mosaic-rockville-cg.com',
-            name: 'Rockville CG App'
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
         },
-        subject: template.subject.replace('[EVENT_TITLE]', event.title),
+        subject: template.subject.replace("[EVENT_TITLE]", event.title),
         html: template.generateHtml(event, oldLocation)
     };
     
     try {
         await sgMail.sendMultiple(msg);
-        console.log('Location change email sent to:', recipients.length, 'recipients');
+        console.log("Location change email sent to:", recipients.length, "recipients");
         return { success: true };
     } catch (error) {
-        console.error('Error sending location change email:', error);
+        console.error("Error sending location change email:", error);
         return { success: false, error: error.message };
     }
 }
@@ -162,7 +163,7 @@ async function getAttendeeEmails(attendeeIds) {
     const emails = [];
     
     // Batch get users
-    const userRefs = attendeeIds.map(id => db.collection('users').doc(id));
+    const userRefs = attendeeIds.map(id => db.collection("users").doc(id));
     const userDocs = await db.getAll(...userRefs);
     
     userDocs.forEach(doc => {
@@ -182,8 +183,8 @@ async function getLeaderEmails() {
     const db = admin.firestore();
     const emails = [];
     
-    const leadersSnapshot = await db.collection('users')
-        .where('role', 'in', ['leader', 'admin'])
+    const leadersSnapshot = await db.collection("users")
+        .where("role", "in", ["leader", "admin"])
         .get();
     
     leadersSnapshot.forEach(doc => {

@@ -1,8 +1,8 @@
 {
-  "name": "rockville-cg-functions",
-  "description": "Cloud Functions for Rockville CG",
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
   "scripts": {
-    "lint": "echo 'No linting configured'",
+    "lint": "eslint .",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
@@ -10,15 +10,17 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "index.js",
   "dependencies": {
-    "@sendgrid/mail": "^8.1.0",
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^4.9.0"
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.1.1",
+    "googleapis": "^144.0.0",
+    "@sendgrid/mail": "^8.1.3"
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
     "firebase-functions-test": "^3.3.0"
   },
   "private": true

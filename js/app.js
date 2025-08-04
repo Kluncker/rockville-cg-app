@@ -791,6 +791,13 @@ function createPreviewEventCard(event) {
     // Check if user can delete this event
     const showDeleteButton = canDeleteEvent(event);
     
+    // Check if user is leader for calendar actions
+    const isUserLeader = isLeader();
+    
+    // Check calendar sync status
+    const hasCalendarEvent = !!event.googleCalendarEventId;
+    const hasDiscrepancy = event.calendarSyncStatus?.hasDiscrepancy || false;
+    
     card.innerHTML = `
         <div class="preview-event-header">
             <div>
@@ -805,9 +812,30 @@ function createPreviewEventCard(event) {
                         <span>${event.location}</span>
                     </div>
                 ` : ''}
+                ${hasCalendarEvent ? `
+                    <div class="calendar-sync-status ${hasDiscrepancy ? 'has-discrepancy' : 'synced'}">
+                        <span class="material-icons">${hasDiscrepancy ? 'sync_problem' : 'event_available'}</span>
+                        <span>${hasDiscrepancy ? 'Sync needed' : 'Calendar synced'}</span>
+                    </div>
+                ` : ''}
             </div>
             <div class="preview-event-actions">
                 <span class="event-type-badge ${event.type}">${getEventTypeLabel(event.type)}</span>
+                ${isUserLeader ? `
+                    ${!hasCalendarEvent ? `
+                        <button class="calendar-btn create-calendar-btn" onclick="event.stopPropagation(); createCalendarEvent('${event.id}')" title="Create Calendar Event">
+                            <span class="material-icons">add_to_photos</span>
+                        </button>
+                    ` : hasDiscrepancy ? `
+                        <button class="calendar-btn sync-calendar-btn" onclick="event.stopPropagation(); syncCalendarEvent('${event.id}')" title="Sync to Calendar">
+                            <span class="material-icons">sync</span>
+                        </button>
+                    ` : event.calendarLink ? `
+                        <a href="${event.calendarLink}" target="_blank" class="calendar-btn view-calendar-btn" onclick="event.stopPropagation();" title="View in Calendar">
+                            <span class="material-icons">open_in_new</span>
+                        </a>
+                    ` : ''}
+                ` : ''}
                 ${showDeleteButton ? `
                     <button class="delete-event-btn" onclick="event.stopPropagation(); deleteEvent('${event.id}')">
                         <span class="material-icons">delete</span>
@@ -816,12 +844,22 @@ function createPreviewEventCard(event) {
             </div>
         </div>
         ${event.description ? `<p class="preview-event-description">${event.description}</p>` : ''}
+        ${hasDiscrepancy && event.calendarSyncStatus?.discrepancyDetails ? `
+            <div class="discrepancy-details">
+                <p class="discrepancy-title">Sync Issues:</p>
+                <ul>
+                    ${event.calendarSyncStatus.discrepancyDetails.map(d => `<li>${d}</li>`).join('')}
+                </ul>
+            </div>
+        ` : ''}
     `;
     
     // Add click handler to edit event
     card.addEventListener('click', (e) => {
-        // Don't trigger edit if clicking on delete button
-        if (!e.target.closest('.delete-event-btn')) {
+        // Don't trigger edit if clicking on buttons or links
+        if (!e.target.closest('.delete-event-btn') && 
+            !e.target.closest('.calendar-btn') && 
+            !e.target.closest('a')) {
             hideEventPreviewModal();
             showEventModal(null, event);
         }
@@ -1227,6 +1265,91 @@ async function deleteEvent(eventId) {
     }
 }
 
+// Create calendar event
+async function createCalendarEvent(eventId) {
+    try {
+        showNotification('Creating calendar event...', 'info');
+        
+        // Call cloud function
+        const createCalendarEventFn = firebase.functions().httpsCallable('createCalendarEvent');
+        const result = await createCalendarEventFn({ eventId });
+        
+        if (result.data.success) {
+            showNotification('Calendar event created successfully!', 'success');
+            
+            // Open calendar link in new tab
+            if (result.data.calendarLink) {
+                window.open(result.data.calendarLink, '_blank');
+            }
+            
+            // Refresh the event list to show updated status
+            loadCalendar();
+            loadUpcomingEvents();
+            
+            // Refresh the preview modal if it's open
+            const eventPreviewModal = document.getElementById('eventPreviewModal');
+            if (eventPreviewModal && eventPreviewModal.style.display !== 'none') {
+                const date = document.getElementById('previewDate').dataset.date;
+                const eventsSnapshot = await db.collection('events')
+                    .where('date', '==', date)
+                    .get();
+                
+                const events = [];
+                eventsSnapshot.forEach(doc => {
+                    events.push({ id: doc.id, ...doc.data() });
+                });
+                
+                showEventPreviewModal(date, events);
+            }
+        } else {
+            showNotification('Failed to create calendar event', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating calendar event:', error);
+        showNotification(error.message || 'Error creating calendar event', 'error');
+    }
+}
+
+// Sync calendar event
+async function syncCalendarEvent(eventId) {
+    try {
+        showNotification('Syncing calendar event...', 'info');
+        
+        // Call cloud function
+        const syncCalendarEventFn = firebase.functions().httpsCallable('syncCalendarEvent');
+        const result = await syncCalendarEventFn({ eventId });
+        
+        if (result.data.success) {
+            showNotification('Calendar event synced successfully!', 'success');
+            
+            // Refresh the event list to show updated status
+            loadCalendar();
+            loadUpcomingEvents();
+            
+            // Refresh the preview modal if it's open
+            const eventPreviewModal = document.getElementById('eventPreviewModal');
+            if (eventPreviewModal && eventPreviewModal.style.display !== 'none') {
+                const date = document.getElementById('previewDate').dataset.date;
+                const eventsSnapshot = await db.collection('events')
+                    .where('date', '==', date)
+                    .get();
+                
+                const events = [];
+                eventsSnapshot.forEach(doc => {
+                    events.push({ id: doc.id, ...doc.data() });
+                });
+                
+                showEventPreviewModal(date, events);
+            }
+        } else {
+            showNotification('Failed to sync calendar event', 'error');
+        }
+    } catch (error) {
+        console.error('Error syncing calendar event:', error);
+        showNotification(error.message || 'Error syncing calendar event', 'error');
+    }
+}
+
 // Expose functions to global scope for other modules
 window.showNotification = showNotification;
 window.showEventModal = showEventModal;
@@ -1234,6 +1357,8 @@ window.isLeader = isLeader;
 window.canDeleteEvent = canDeleteEvent;
 window.canEditEvent = canEditEvent;
 window.deleteEvent = deleteEvent;
+window.createCalendarEvent = createCalendarEvent;
+window.syncCalendarEvent = syncCalendarEvent;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
