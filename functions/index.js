@@ -128,8 +128,27 @@ exports.createCalendarEvent = functions.https.onCall(async (data, context) => {
         
         const eventData = eventDoc.data();
         
-        // Get attendee emails
-        const attendeeEmails = await email.getAttendeeEmails(eventData.attendees || []);
+        // Get attendee emails from event
+        const eventAttendees = eventData.attendees || [];
+        
+        // Get task assignees and merge with event attendees
+        const tasksSnapshot = await db.collection("tasks")
+            .where("eventId", "==", eventId)
+            .get();
+        
+        const taskAssignees = [];
+        tasksSnapshot.forEach(doc => {
+            const task = doc.data();
+            if (task.assignedTo && !taskAssignees.includes(task.assignedTo)) {
+                taskAssignees.push(task.assignedTo);
+            }
+        });
+        
+        // Merge and deduplicate attendees
+        const allAttendees = [...new Set([...eventAttendees, ...taskAssignees])];
+        
+        // Get all attendee emails
+        const attendeeEmails = await email.getAttendeeEmails(allAttendees);
         
         // Create calendar event
         const result = await calendar.createCalendarEvent(eventData, attendeeEmails);
@@ -193,8 +212,27 @@ exports.syncCalendarEvent = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError("failed-precondition", "No calendar event associated with this event");
         }
         
-        // Get attendee emails
-        const attendeeEmails = await email.getAttendeeEmails(eventData.attendees || []);
+        // Get attendee emails from event
+        const eventAttendees = eventData.attendees || [];
+        
+        // Get task assignees and merge with event attendees
+        const tasksSnapshot = await db.collection("tasks")
+            .where("eventId", "==", eventId)
+            .get();
+        
+        const taskAssignees = [];
+        tasksSnapshot.forEach(doc => {
+            const task = doc.data();
+            if (task.assignedTo && !taskAssignees.includes(task.assignedTo)) {
+                taskAssignees.push(task.assignedTo);
+            }
+        });
+        
+        // Merge and deduplicate attendees
+        const allAttendees = [...new Set([...eventAttendees, ...taskAssignees])];
+        
+        // Get all attendee emails
+        const attendeeEmails = await email.getAttendeeEmails(allAttendees);
         
         // Update calendar event
         const result = await calendar.updateCalendarEvent(
@@ -301,16 +339,75 @@ exports.checkCalendarDiscrepancies = functions.pubsub
         }
     });
 
-// Function to handle event deletion (also deletes calendar event)
+// Delete calendar event (callable function)
+exports.deleteCalendarEvent = functions.https.onCall(async (data, context) => {
+    // Check authentication
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "User must be authenticated");
+    }
+    
+    const { eventId } = data;
+    
+    if (!eventId) {
+        throw new functions.https.HttpsError("invalid-argument", "Event ID is required");
+    }
+    
+    try {
+        // Get event data
+        const eventDoc = await db.collection("events").doc(eventId).get();
+        if (!eventDoc.exists) {
+            throw new functions.https.HttpsError("not-found", "Event not found");
+        }
+        
+        const eventData = eventDoc.data();
+        
+        // Check if user can delete this event
+        const userDoc = await db.collection("users").doc(context.auth.uid).get();
+        const userRole = userDoc.data()?.role;
+        const canDelete = (context.auth.uid === eventData.createdBy) || 
+                          (userRole === "leader" || userRole === "admin");
+        
+        if (!canDelete) {
+            throw new functions.https.HttpsError("permission-denied", "You don't have permission to delete this event");
+        }
+        
+        if (!eventData.googleCalendarEventId) {
+            throw new functions.https.HttpsError("failed-precondition", "No calendar event associated with this event");
+        }
+        
+        // Delete the calendar event
+        const result = await calendar.deleteCalendarEvent(eventData.googleCalendarEventId);
+        
+        if (result.success) {
+            // Clear calendar info from event (in case deletion happens before event deletion)
+            await db.collection("events").doc(eventId).update({
+                googleCalendarEventId: admin.firestore.FieldValue.delete(),
+                calendarLink: admin.firestore.FieldValue.delete(),
+                calendarSyncStatus: admin.firestore.FieldValue.delete()
+            }).catch(() => {
+                // Event might already be deleted, that's ok
+            });
+            
+            return { success: true };
+        } else {
+            throw new functions.https.HttpsError("internal", result.error || "Failed to delete calendar event");
+        }
+        
+    } catch (error) {
+        console.error("Error deleting calendar event:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
+// Function to handle event deletion (cleanup tasks)
 exports.onEventDeleted = functions.firestore
     .document("events/{eventId}")
     .onDelete(async (snap) => {
         const deletedEvent = snap.data();
         
-        if (deletedEvent.googleCalendarEventId) {
-            console.log(`Deleting calendar event for: ${deletedEvent.title}`);
-            await calendar.deleteCalendarEvent(deletedEvent.googleCalendarEventId);
-        }
+        // Note: Calendar event deletion is now handled separately via deleteCalendarEvent function
+        // This function now only logs the deletion
+        console.log(`Event deleted: ${deletedEvent.title}`);
         
         return null;
     });

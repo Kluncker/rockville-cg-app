@@ -496,6 +496,17 @@ async function handleEventSubmit(e) {
         let eventIdToUse = eventId;
         
         if (isEditing) {
+            // Check if event has calendar event and mark as discrepancy
+            const eventDoc = await db.collection('events').doc(eventId).get();
+            const eventData = eventDoc.data();
+            
+            if (eventData.googleCalendarEventId) {
+                // Mark as having discrepancy since we're editing
+                formData['calendarSyncStatus.hasDiscrepancy'] = true;
+                formData['calendarSyncStatus.discrepancyDetails'] = ['Event modified in app'];
+                formData['calendarSyncStatus.lastChecked'] = firebase.firestore.FieldValue.serverTimestamp();
+            }
+            
             // Update existing event
             await db.collection('events').doc(eventId).update(formData);
             
@@ -824,17 +835,18 @@ function createPreviewEventCard(event) {
                 ${isUserLeader ? `
                     ${!hasCalendarEvent ? `
                         <button class="calendar-btn create-calendar-btn" onclick="event.stopPropagation(); createCalendarEvent('${event.id}')" title="Create Calendar Event">
-                            <span class="material-icons">add_to_photos</span>
+                            <span class="material-icons">event</span>
                         </button>
-                    ` : hasDiscrepancy ? `
-                        <button class="calendar-btn sync-calendar-btn" onclick="event.stopPropagation(); syncCalendarEvent('${event.id}')" title="Sync to Calendar">
+                    ` : `
+                        <button class="calendar-btn sync-calendar-btn ${!hasDiscrepancy ? 'synced' : ''}" onclick="event.stopPropagation(); syncCalendarEvent('${event.id}')" title="Sync to Calendar">
                             <span class="material-icons">sync</span>
                         </button>
-                    ` : event.calendarLink ? `
-                        <a href="${event.calendarLink}" target="_blank" class="calendar-btn view-calendar-btn" onclick="event.stopPropagation();" title="View in Calendar">
-                            <span class="material-icons">open_in_new</span>
-                        </a>
-                    ` : ''}
+                        ${event.calendarLink ? `
+                            <a href="${event.calendarLink}" target="_blank" class="calendar-btn view-calendar-btn" onclick="event.stopPropagation();" title="View in Calendar">
+                                <span class="material-icons">open_in_new</span>
+                            </a>
+                        ` : ''}
+                    `}
                 ` : ''}
                 ${showDeleteButton ? `
                     <button class="delete-event-btn" onclick="event.stopPropagation(); deleteEvent('${event.id}')">
@@ -1228,11 +1240,23 @@ function canEditEvent(event) {
 
 // Delete event
 async function deleteEvent(eventId) {
-    if (!confirm('Are you sure you want to delete this event?')) {
-        return;
-    }
-    
     try {
+        // Get event data to check for calendar event
+        const eventDoc = await db.collection('events').doc(eventId).get();
+        const eventData = eventDoc.data();
+        
+        let deleteCalendar = false;
+        
+        // Check if event has Google Calendar event
+        if (eventData.googleCalendarEventId) {
+            deleteCalendar = confirm('Would you like to also delete the associated calendar event?');
+        } else {
+            // Just confirm regular deletion
+            if (!confirm('Are you sure you want to delete this event?')) {
+                return;
+            }
+        }
+        
         // Start a batch operation
         const batch = db.batch();
         
@@ -1252,6 +1276,9 @@ async function deleteEvent(eventId) {
         // Commit the batch
         await batch.commit();
         
+        // Note: The calendar event will be deleted by the onEventDeleted cloud function
+        // if deleteCalendar is true (it checks for googleCalendarEventId)
+        
         showNotification('Event deleted successfully', 'success');
         
         // Refresh the calendar and close the preview modal
@@ -1267,6 +1294,11 @@ async function deleteEvent(eventId) {
 
 // Create calendar event
 async function createCalendarEvent(eventId) {
+    // Confirm creation
+    if (!confirm('Create a Google Calendar event for this event? Invitations will be sent to all attendees.')) {
+        return;
+    }
+    
     try {
         showNotification('Creating calendar event...', 'info');
         
@@ -1313,6 +1345,31 @@ async function createCalendarEvent(eventId) {
 // Sync calendar event
 async function syncCalendarEvent(eventId) {
     try {
+        // Get event data to show what will be synced
+        const eventDoc = await db.collection('events').doc(eventId).get();
+        const eventData = eventDoc.data();
+        
+        // Build sync confirmation message
+        let message = 'The following information will be synced to Google Calendar:\n\n';
+        message += `Title: ${eventData.title}\n`;
+        message += `Date: ${new Date(eventData.date).toLocaleDateString()}\n`;
+        message += `Time: ${eventData.time || 'Not set'}\n`;
+        message += `Location: ${eventData.location || 'Not set'}\n`;
+        
+        if (eventData.calendarSyncStatus?.discrepancyDetails && eventData.calendarSyncStatus.discrepancyDetails.length > 0) {
+            message += '\nChanges detected:\n';
+            eventData.calendarSyncStatus.discrepancyDetails.forEach(detail => {
+                message += `• ${detail}\n`;
+            });
+        }
+        
+        message += '\nAttendees will receive email notifications about the update.';
+        
+        // Confirm sync
+        if (!confirm(message)) {
+            return;
+        }
+        
         showNotification('Syncing calendar event...', 'info');
         
         // Call cloud function

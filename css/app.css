@@ -1155,6 +1155,15 @@ section::before {
     color: #ff9800;
 }
 
+.sync-calendar-btn.synced {
+    color: #4caf50;
+}
+
+.sync-calendar-btn.synced:hover {
+    background: rgba(76, 175, 80, 0.1);
+    color: #388e3c;
+}
+
 .view-calendar-btn:hover {
     background: rgba(33, 150, 243, 0.1);
     color: #2196f3;

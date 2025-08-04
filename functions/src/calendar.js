@@ -8,12 +8,23 @@ const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID ||
                     functions.config().google?.calendar_id || 
                     "primary";
 
+// Get impersonation email from environment or config
+const IMPERSONATION_EMAIL = process.env.GOOGLE_IMPERSONATION_EMAIL || 
+                            functions.config().google?.impersonation_email;
+
 // Initialize calendar client
 function getCalendarClient() {
-    // Use Application Default Credentials (ADC)
+    // Log impersonation setup
+    console.log(`Setting up calendar client with impersonation for: ${IMPERSONATION_EMAIL}`);
+    
+    // Use Application Default Credentials (ADC) with Domain-Wide Delegation
     // This automatically uses the default service account when running in Firebase Functions
     const auth = new google.auth.GoogleAuth({
-        scopes: ["https://www.googleapis.com/auth/calendar"]
+        scopes: ["https://www.googleapis.com/auth/calendar"],
+        // Impersonate the admin user for domain-wide delegation
+        clientOptions: {
+            subject: IMPERSONATION_EMAIL
+        }
     });
     
     return google.calendar({ version: "v3", auth });
