@@ -190,6 +190,28 @@
                     </select>
                 </div>
                 
+                <div class="form-group">
+                    <label for="attendeeTemplate">Attendees</label>
+                    <select id="attendeeTemplate" required>
+                        <option value="">Select Attendee Group</option>
+                        <option value="everyone">Everyone</option>
+                        <option value="men">Men's Group</option>
+                        <option value="women">Women's Group</option>
+                        <option value="custom">Custom Selection</option>
+                    </select>
+                    <div id="attendeePreview" class="attendee-preview" style="display: none;">
+                        <span class="attendee-count"></span>
+                        <button type="button" class="secondary-button" id="viewAttendeesBtn">
+                            <span class="material-icons">people</span>
+                            View/Edit Attendees
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="attendeesList" class="attendees-list" style="display: none;">
+                    <!-- Attendees checkboxes will be populated here -->
+                </div>
+                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="eventDate">Date</label>

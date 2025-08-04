@@ -33,3 +33,4 @@ build/
 # User data
 scripts/allowedUsers.json
 scripts/serviceAccountKey.json
+scripts/update_user_gender.py

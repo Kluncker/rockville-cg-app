@@ -13,6 +13,7 @@ const firebaseConfig = {
 // Global variables
 let auth, db, currentUser;
 let availableUsers = []; // Store list of users for task assignment
+let selectedAttendees = []; // Store selected attendees for the event
 
 // Expose to global scope for other modules
 window.auth = null;
@@ -282,6 +283,18 @@ function setupEventListeners() {
             filterTasks(chip.dataset.filter);
         });
     });
+    
+    // Attendee template selector
+    const attendeeTemplate = document.getElementById('attendeeTemplate');
+    if (attendeeTemplate) {
+        attendeeTemplate.addEventListener('change', handleAttendeeTemplateChange);
+    }
+    
+    // View/Edit attendees button
+    const viewAttendeesBtn = document.getElementById('viewAttendeesBtn');
+    if (viewAttendeesBtn) {
+        viewAttendeesBtn.addEventListener('click', toggleAttendeesView);
+    }
 }
 
 // Show event modal
@@ -294,6 +307,11 @@ function showEventModal(date = null, eventData = null) {
         // Reset form
         form.reset();
         document.getElementById('taskInputs').innerHTML = '';
+        
+        // Reset attendee selections
+        selectedAttendees = [];
+        document.getElementById('attendeePreview').style.display = 'none';
+        document.getElementById('attendeesList').style.display = 'none';
         
         if (eventData) {
             // Edit mode - check permissions first
@@ -313,6 +331,12 @@ function showEventModal(date = null, eventData = null) {
             }
             // Clear event ID to indicate new event
             delete form.dataset.eventId;
+            
+            // Set up event type change listener for auto-selecting attendee template
+            const eventTypeSelect = document.getElementById('eventType');
+            if (eventTypeSelect) {
+                eventTypeSelect.addEventListener('change', handleEventTypeChange);
+            }
         }
         
         modal.style.display = 'flex';
@@ -344,6 +368,19 @@ function populateEventForm(eventData) {
     document.getElementById('eventTime').value = eventData.time || '';
     document.getElementById('eventLocation').value = eventData.location || '';
     document.getElementById('eventDescription').value = eventData.description || '';
+    
+    // Populate attendees if they exist
+    if (eventData.attendeeTemplate) {
+        const attendeeTemplate = document.getElementById('attendeeTemplate');
+        attendeeTemplate.value = eventData.attendeeTemplate;
+        
+        // Set selected attendees
+        selectedAttendees = eventData.attendees || [];
+        
+        // Trigger change event to populate the attendee list
+        const changeEvent = new Event('change', { bubbles: true });
+        attendeeTemplate.dispatchEvent(changeEvent);
+    }
     
     // Populate tasks if they exist
     if (eventData.tasks && eventData.tasks.length > 0) {
@@ -389,6 +426,7 @@ async function loadAvailableUsers() {
                 uid: doc.id,
                 displayName: userData.displayName || 'Unknown User',
                 email: userData.email,
+                gender: userData.gender || null,
                 photoURL: userData.photoURL
             });
         });
@@ -425,6 +463,8 @@ async function handleEventSubmit(e) {
         time: document.getElementById('eventTime').value,
         location: document.getElementById('eventLocation').value,
         description: document.getElementById('eventDescription').value,
+        attendeeTemplate: document.getElementById('attendeeTemplate').value,
+        attendees: selectedAttendees,
         tasks: []
     };
     
@@ -788,6 +828,171 @@ function createPreviewEventCard(event) {
     });
     
     return card;
+}
+
+// Handle attendee template change
+async function handleAttendeeTemplateChange(e) {
+    const template = e.target.value;
+    const attendeePreview = document.getElementById('attendeePreview');
+    const attendeesList = document.getElementById('attendeesList');
+    
+    if (!template) {
+        attendeePreview.style.display = 'none';
+        attendeesList.style.display = 'none';
+        selectedAttendees = [];
+        return;
+    }
+    
+    // Show preview
+    attendeePreview.style.display = 'block';
+    
+    // Filter users based on template
+    let filteredUsers = [];
+    
+    switch(template) {
+        case 'everyone':
+            filteredUsers = availableUsers;
+            break;
+        case 'men':
+            filteredUsers = await getUsersByGender('male');
+            break;
+        case 'women':
+            filteredUsers = await getUsersByGender('female');
+            break;
+        case 'custom':
+            filteredUsers = availableUsers;
+            break;
+    }
+    
+    // Update attendee count
+    const attendeeCount = attendeePreview.querySelector('.attendee-count');
+    attendeeCount.textContent = `${filteredUsers.length} attendees selected`;
+    
+    // Store selected attendees
+    selectedAttendees = filteredUsers.map(user => user.uid);
+    
+    // Populate attendees list
+    populateAttendeesList(filteredUsers, template);
+}
+
+// Get users by gender
+async function getUsersByGender(gender) {
+    try {
+        const usersSnapshot = await db.collection('users')
+            .where('gender', '==', gender)
+            .get();
+        
+        const users = [];
+        usersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            users.push({
+                uid: doc.id,
+                displayName: userData.displayName || 'Unknown User',
+                email: userData.email,
+                gender: userData.gender,
+                photoURL: userData.photoURL
+            });
+        });
+        
+        return users;
+    } catch (error) {
+        console.error('Error getting users by gender:', error);
+        return [];
+    }
+}
+
+// Populate attendees list
+function populateAttendeesList(users, template) {
+    const attendeesList = document.getElementById('attendeesList');
+    attendeesList.innerHTML = '';
+    
+    // Add header
+    const header = document.createElement('h4');
+    header.textContent = 'Attendees';
+    attendeesList.appendChild(header);
+    
+    // Create checkbox list
+    const checkboxList = document.createElement('div');
+    checkboxList.className = 'attendee-checkboxes';
+    
+    users.forEach(user => {
+        const checkboxDiv = document.createElement('div');
+        checkboxDiv.className = 'attendee-checkbox';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `attendee-${user.uid}`;
+        checkbox.value = user.uid;
+        checkbox.checked = selectedAttendees.includes(user.uid);
+        
+        if (template !== 'custom') {
+            checkbox.disabled = true; // Disable for non-custom templates
+        }
+        
+        checkbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                selectedAttendees.push(user.uid);
+            } else {
+                selectedAttendees = selectedAttendees.filter(id => id !== user.uid);
+            }
+            updateAttendeeCount();
+        });
+        
+        const label = document.createElement('label');
+        label.htmlFor = `attendee-${user.uid}`;
+        label.innerHTML = `
+            ${user.displayName}
+            ${user.gender ? `<span class="material-icons attendee-gender-icon">${user.gender === 'male' ? 'male' : 'female'}</span>` : ''}
+        `;
+        
+        checkboxDiv.appendChild(checkbox);
+        checkboxDiv.appendChild(label);
+        checkboxList.appendChild(checkboxDiv);
+    });
+    
+    attendeesList.appendChild(checkboxList);
+}
+
+// Toggle attendees view
+function toggleAttendeesView() {
+    const attendeesList = document.getElementById('attendeesList');
+    if (attendeesList.style.display === 'none' || !attendeesList.style.display) {
+        attendeesList.style.display = 'block';
+    } else {
+        attendeesList.style.display = 'none';
+    }
+}
+
+// Update attendee count
+function updateAttendeeCount() {
+    const attendeePreview = document.getElementById('attendeePreview');
+    const attendeeCount = attendeePreview.querySelector('.attendee-count');
+    attendeeCount.textContent = `${selectedAttendees.length} attendees selected`;
+}
+
+// Handle event type change to auto-select attendee template
+function handleEventTypeChange(e) {
+    const eventType = e.target.value;
+    const attendeeTemplate = document.getElementById('attendeeTemplate');
+    
+    if (!attendeeTemplate) return;
+    
+    // Map event types to attendee templates
+    const templateMap = {
+        'bible-study': 'everyone',
+        'mens-fellowship': 'men',
+        'womens-fellowship': 'women',
+        'sunday-service': 'everyone',
+        'community': 'custom'
+    };
+    
+    // Set the attendee template based on event type
+    if (eventType && templateMap[eventType]) {
+        attendeeTemplate.value = templateMap[eventType];
+        // Trigger the change event to populate attendees
+        const changeEvent = new Event('change', { bubbles: true });
+        attendeeTemplate.dispatchEvent(changeEvent);
+    }
 }
 
 // Expose functions to global scope

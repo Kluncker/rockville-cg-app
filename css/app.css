@@ -1037,6 +1037,74 @@ section::before {
     margin-bottom: 1rem;
 }
 
+/* Attendee Components */
+.attendee-preview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--content-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+}
+
+.attendee-count {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.attendees-list {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--content-bg);
+    border-radius: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.attendees-list h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.attendee-checkbox {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.attendee-checkbox:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.attendee-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin-right: 0.75rem;
+    cursor: pointer;
+}
+
+.attendee-checkbox label {
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.attendee-gender-icon {
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
 /* Animations */
 @keyframes fadeInScale {
     from {
