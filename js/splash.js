@@ -122,8 +122,11 @@ async function isEmailAllowed(email) {
     try {
         console.log('🔍 Checking if email is allowed:', email);
         
-        // Call the Cloud Function
-        const checkUserAuthorization = firebase.functions().httpsCallable('checkUserAuthorization');
+        // Call the Cloud Function (use production, not emulator)
+        const functionsInstance = window.getFirebaseFunctions ? 
+            window.getFirebaseFunctions('checkUserAuthorization') : 
+            firebase.functions();
+        const checkUserAuthorization = functionsInstance.httpsCallable('checkUserAuthorization');
         const result = await checkUserAuthorization();
         
         console.log('📡 Authorization check result:', result.data);
