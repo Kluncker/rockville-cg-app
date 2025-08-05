@@ -1100,10 +1100,6 @@ section::before {
     gap: 0.5rem;
 }
 
-.attendee-gender-icon {
-    font-size: 16px;
-    color: var(--text-secondary);
-}
 
 /* Calendar Sync Styles */
 .calendar-sync-status {

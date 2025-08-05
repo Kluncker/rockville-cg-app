@@ -69,21 +69,32 @@ async function getCalendarClient() {
 async function createCalendarEvent(eventData, attendeeEmails) {
     const calendar = await getCalendarClient();
     
-    // Convert event data to Google Calendar format
-    const startDateTime = new Date(`${eventData.date}T${eventData.time || "09:00"}:00`);
-    const endDateTime = new Date(startDateTime);
-    endDateTime.setHours(startDateTime.getHours() + 2); // Default 2-hour duration
+    // Parse the date and time as Eastern Time
+    // The time entered by the user should be treated as Eastern Time
+    const dateTimeString = `${eventData.date}T${eventData.time || "09:00"}:00`;
+    
+    // Calculate end time
+    const [hours, minutes] = (eventData.time || "09:00").split(":").map(Number);
+    const durationMinutes = eventData.duration || 120;
+    const endHours = Math.floor((hours * 60 + minutes + durationMinutes) / 60);
+    const endMinutes = (hours * 60 + minutes + durationMinutes) % 60;
+    const endTime = `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}:00`;
+    const endDateTimeString = endHours >= 24 ? 
+        // Next day
+        `${new Date(new Date(eventData.date).getTime() + 86400000).toISOString().split("T")[0]}T${String(endHours % 24).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}:00` :
+        // Same day
+        `${eventData.date}T${endTime}`;
     
     const calendarEvent = {
         summary: eventData.title,
         description: eventData.description || "",
         location: eventData.location || "",
         start: {
-            dateTime: startDateTime.toISOString(),
+            dateTime: dateTimeString,  // Use local format without 'Z'
             timeZone: "America/New_York"
         },
         end: {
-            dateTime: endDateTime.toISOString(),
+            dateTime: endDateTimeString,  // Use local format without 'Z'
             timeZone: "America/New_York"
         },
         attendees: attendeeEmails.map(email => ({ email })),
@@ -122,20 +133,32 @@ async function createCalendarEvent(eventData, attendeeEmails) {
 async function updateCalendarEvent(calendarEventId, eventData, attendeeEmails) {
     const calendar = await getCalendarClient();
     
-    const startDateTime = new Date(`${eventData.date}T${eventData.time || "09:00"}:00`);
-    const endDateTime = new Date(startDateTime);
-    endDateTime.setHours(startDateTime.getHours() + 2);
+    // Parse the date and time as Eastern Time
+    // The time entered by the user should be treated as Eastern Time
+    const dateTimeString = `${eventData.date}T${eventData.time || "09:00"}:00`;
+    
+    // Calculate end time
+    const [hours, minutes] = (eventData.time || "09:00").split(":").map(Number);
+    const durationMinutes = eventData.duration || 120;
+    const endHours = Math.floor((hours * 60 + minutes + durationMinutes) / 60);
+    const endMinutes = (hours * 60 + minutes + durationMinutes) % 60;
+    const endTime = `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}:00`;
+    const endDateTimeString = endHours >= 24 ? 
+        // Next day
+        `${new Date(new Date(eventData.date).getTime() + 86400000).toISOString().split("T")[0]}T${String(endHours % 24).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}:00` :
+        // Same day
+        `${eventData.date}T${endTime}`;
     
     const calendarEvent = {
         summary: eventData.title,
         description: eventData.description || "",
         location: eventData.location || "",
         start: {
-            dateTime: startDateTime.toISOString(),
+            dateTime: dateTimeString,  // Use local format without 'Z'
             timeZone: "America/New_York"
         },
         end: {
-            dateTime: endDateTime.toISOString(),
+            dateTime: endDateTimeString,  // Use local format without 'Z'
             timeZone: "America/New_York"
         },
         attendees: attendeeEmails.map(email => ({ email })),

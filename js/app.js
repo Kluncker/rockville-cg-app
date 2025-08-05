@@ -472,11 +472,17 @@ async function handleEventSubmit(e) {
     const eventId = form.dataset.eventId; // Get event ID if editing
     const isEditing = !!eventId;
     
+    // Get the time value and convert to Eastern Time format
+    const timeValue = document.getElementById('eventTime').value;
+    const dateValue = document.getElementById('eventDate').value;
+    
+    // Store the time as-is since we're treating it as Eastern Time
     const formData = {
         title: document.getElementById('eventTitle').value,
         type: document.getElementById('eventType').value,
-        date: document.getElementById('eventDate').value,
-        time: document.getElementById('eventTime').value,
+        date: dateValue,
+        time: timeValue,
+        timeZone: 'America/New_York', // Explicitly store timezone
         duration: parseInt(document.getElementById('eventDurationHours').value || 0) * 60 + parseInt(document.getElementById('eventDurationMinutes').value || 0), // Duration in minutes
         location: document.getElementById('eventLocation').value,
         description: document.getElementById('eventDescription').value,
@@ -1015,10 +1021,7 @@ function populateAttendeesList(users, template) {
         
         const label = document.createElement('label');
         label.htmlFor = `attendee-${user.uid}`;
-        label.innerHTML = `
-            ${user.displayName}
-            ${user.gender ? `<span class="material-icons attendee-gender-icon">${user.gender === 'male' ? 'male' : 'female'}</span>` : ''}
-        `;
+        label.textContent = user.displayName;
         
         checkboxDiv.appendChild(checkbox);
         checkboxDiv.appendChild(label);
