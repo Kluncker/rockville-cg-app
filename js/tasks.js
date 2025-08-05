@@ -123,9 +123,7 @@ async function confirmTask(taskId) {
         showNotification('Task confirmed successfully!', 'success');
         loadUserTasks(); // Reload tasks
         
-        // Send confirmation email (would be handled by Cloud Function)
-        // This is just a placeholder
-        console.log('Task confirmed, email notification would be sent');
+        // Email notification is now handled automatically by Cloud Function trigger
         
     } catch (error) {
         console.error('Error confirming task:', error);

@@ -59,6 +59,93 @@ const emailTemplates = {
                 </div>
             </div>
         `
+    },
+    
+    taskAssigned: {
+        subject: "New Task Assigned: [TASK_TITLE] - Due [DUE_DATE]",
+        generateHtml: (task, event) => `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #FF6F00;">New Task Assigned to You</h2>
+                <h3 style="color: #333;">${task.title}</h3>
+                
+                <div style="background: #FFF3E0; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FF9800;">
+                    <p><strong>Event:</strong> ${event.title}</p>
+                    <p><strong>Event Date:</strong> ${new Date(event.date).toLocaleDateString()}</p>
+                    <p><strong>Task Due Date:</strong> ${new Date(task.eventDate).toLocaleDateString()}</p>
+                    ${task.description ? `<p><strong>Description:</strong> ${task.description}</p>` : ""}
+                </div>
+                
+                <div style="margin: 20px 0;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html" style="display: inline-block; padding: 12px 24px; background: #FF9800; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Task in Dashboard</a>
+                </div>
+                
+                <p style="color: #666;">Please confirm this task when you're ready to commit to completing it.</p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                    <p>This is an automated message from Rockville CG App.</p>
+                </div>
+            </div>
+        `
+    },
+    
+    taskReminder: {
+        subject: "Task Reminder ([TIME_FRAME]): [TASK_TITLE]",
+        generateHtml: (task, event, timeFrame) => {
+            const daysUntil = Math.ceil((new Date(task.eventDate) - new Date()) / (1000 * 60 * 60 * 24));
+            const urgencyColor = timeFrame === "1 week" || timeFrame === "Day of" ? "#FF5252" : "#FF9800";
+            
+            return `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: ${urgencyColor};">Task Reminder - ${timeFrame}</h2>
+                <h3 style="color: #333;">${task.title}</h3>
+                
+                <div style="background: #FFF3E0; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
+                    <p><strong>Event:</strong> ${event.title}</p>
+                    <p><strong>Due Date:</strong> ${new Date(task.eventDate).toLocaleDateString()}</p>
+                    <p><strong>Days Until Due:</strong> ${daysUntil} days</p>
+                    ${task.description ? `<p><strong>Description:</strong> ${task.description}</p>` : ""}
+                    <p><strong>Status:</strong> ${task.status === "confirmed" ? "✅ Confirmed" : "⏳ Pending Confirmation"}</p>
+                </div>
+                
+                ${task.status !== "confirmed" ? `
+                <div style="margin: 20px 0;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html" style="display: inline-block; padding: 12px 24px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Confirm Task Now</a>
+                </div>
+                <p style="color: #666;">Please confirm this task if you haven't already.</p>
+                ` : `
+                <p style="color: #4CAF50; font-weight: bold;">✅ You have already confirmed this task.</p>
+                `}
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                    <p>This is an automated reminder from Rockville CG App.</p>
+                </div>
+            </div>
+            `;
+        }
+    },
+    
+    taskConfirmed: {
+        subject: "Task Confirmed: [TASK_TITLE]",
+        generateHtml: (task, event, confirmedBy) => `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #4CAF50;">Task Confirmed</h2>
+                <h3 style="color: #333;">${task.title}</h3>
+                
+                <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4CAF50;">
+                    <p><strong>Event:</strong> ${event.title}</p>
+                    <p><strong>Due Date:</strong> ${new Date(task.eventDate).toLocaleDateString()}</p>
+                    <p><strong>Confirmed By:</strong> ${confirmedBy.displayName || confirmedBy.email}</p>
+                    <p><strong>Confirmed At:</strong> ${new Date().toLocaleString()}</p>
+                    ${task.description ? `<p><strong>Description:</strong> ${task.description}</p>` : ""}
+                </div>
+                
+                <p style="color: #666;">Thank you for confirming this task. The event organizers have been notified.</p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                    <p>This is an automated message from Rockville CG App.</p>
+                </div>
+            </div>
+        `
     }
 };
 
@@ -167,9 +254,145 @@ async function getLeaderEmails() {
     return emails;
 }
 
+// Send task assigned email
+async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients) {
+    const template = emailTemplates.taskAssigned;
+    
+    if (!assigneeEmail) {
+        console.error("No assignee email provided for task assigned email");
+        return { success: false, error: "No assignee email provided" };
+    }
+    
+    const msg = {
+        to: assigneeEmail,
+        cc: ccRecipients.filter(email => email !== assigneeEmail), // Don't CC the assignee
+        from: {
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
+        },
+        subject: template.subject
+            .replace("[TASK_TITLE]", task.title)
+            .replace("[DUE_DATE]", new Date(task.eventDate).toLocaleDateString()),
+        html: template.generateHtml(task, event)
+    };
+    
+    try {
+        await sgMail.send(msg);
+        console.log("Task assigned email sent to:", assigneeEmail, "CC:", ccRecipients.length, "recipients");
+        return { success: true };
+    } catch (error) {
+        console.error("Error sending task assigned email:", error);
+        if (error.response) {
+            console.error("SendGrid error response:", JSON.stringify(error.response.body, null, 2));
+        }
+        return { success: false, error: error.message };
+    }
+}
+
+// Send task reminder email
+async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, timeFrame) {
+    const template = emailTemplates.taskReminder;
+    
+    if (!assigneeEmail) {
+        console.error("No assignee email provided for task reminder email");
+        return { success: false, error: "No assignee email provided" };
+    }
+    
+    const msg = {
+        to: assigneeEmail,
+        cc: ccRecipients.filter(email => email !== assigneeEmail), // Don't CC the assignee
+        from: {
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
+        },
+        subject: template.subject
+            .replace("[TIME_FRAME]", timeFrame)
+            .replace("[TASK_TITLE]", task.title),
+        html: template.generateHtml(task, event, timeFrame)
+    };
+    
+    try {
+        await sgMail.send(msg);
+        console.log(`Task reminder (${timeFrame}) email sent to:`, assigneeEmail, "CC:", ccRecipients.length, "recipients");
+        return { success: true };
+    } catch (error) {
+        console.error("Error sending task reminder email:", error);
+        if (error.response) {
+            console.error("SendGrid error response:", JSON.stringify(error.response.body, null, 2));
+        }
+        return { success: false, error: error.message };
+    }
+}
+
+// Send task confirmed email
+async function sendTaskConfirmedEmail(task, event, assigneeEmail, ccRecipients, confirmedBy) {
+    const template = emailTemplates.taskConfirmed;
+    
+    if (!assigneeEmail) {
+        console.error("No assignee email provided for task confirmed email");
+        return { success: false, error: "No assignee email provided" };
+    }
+    
+    const msg = {
+        to: assigneeEmail,
+        cc: ccRecipients.filter(email => email !== assigneeEmail), // Don't CC the assignee
+        from: {
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
+        },
+        subject: template.subject.replace("[TASK_TITLE]", task.title),
+        html: template.generateHtml(task, event, confirmedBy)
+    };
+    
+    try {
+        await sgMail.send(msg);
+        console.log("Task confirmed email sent to:", assigneeEmail, "CC:", ccRecipients.length, "recipients");
+        return { success: true };
+    } catch (error) {
+        console.error("Error sending task confirmed email:", error);
+        if (error.response) {
+            console.error("SendGrid error response:", JSON.stringify(error.response.body, null, 2));
+        }
+        return { success: false, error: error.message };
+    }
+}
+
+// Get event creator email
+async function getEventCreatorEmail(eventCreatorId) {
+    if (!eventCreatorId) return null;
+    
+    const db = admin.firestore();
+    const creatorDoc = await db.collection("users").doc(eventCreatorId).get();
+    
+    if (creatorDoc.exists) {
+        return creatorDoc.data().email || null;
+    }
+    
+    return null;
+}
+
+// Get CC recipients for task emails (leaders + event creator)
+async function getTaskEmailCCRecipients(eventCreatorId) {
+    const leaderEmails = await getLeaderEmails();
+    const creatorEmail = await getEventCreatorEmail(eventCreatorId);
+    
+    // Combine and deduplicate
+    const allEmails = [...leaderEmails];
+    if (creatorEmail && !allEmails.includes(creatorEmail)) {
+        allEmails.push(creatorEmail);
+    }
+    
+    return allEmails;
+}
+
 module.exports = {
     sendDiscrepancyAlert,
     sendEventCreatedEmail,
+    sendTaskAssignedEmail,
+    sendTaskReminderEmail,
+    sendTaskConfirmedEmail,
     getAttendeeEmails,
-    getLeaderEmails
+    getLeaderEmails,
+    getEventCreatorEmail,
+    getTaskEmailCCRecipients
 };
