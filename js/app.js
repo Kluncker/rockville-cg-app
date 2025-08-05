@@ -15,6 +15,16 @@ let auth, db, currentUser;
 let availableUsers = []; // Store list of users for task assignment
 let selectedAttendees = []; // Store selected attendees for the event
 
+// Loading state management
+let loadingStates = {
+    auth: false,
+    userData: false,
+    availableUsers: false,
+    calendar: false,
+    tasks: false,
+    upcomingEvents: false
+};
+
 // Expose to global scope for other modules
 window.auth = null;
 window.db = null;
@@ -51,6 +61,9 @@ async function isEmailAllowed(email) {
 
 // Initialize Firebase
 function initializeFirebase() {
+    // Add loading class to body
+    document.body.classList.add('loading');
+    
     if (firebaseConfig.apiKey) {
         const app = firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
@@ -82,7 +95,11 @@ function initializeFirebase() {
                 
                 currentUser = user;
                 window.currentUser = user;
+                loadingStates.auth = true;
+                
                 await loadUserData();
+                loadingStates.userData = true;
+                
                 initializeApp();
             } else {
                 // Redirect to login
@@ -140,13 +157,67 @@ async function loadUserData() {
 }
 
 // Initialize main app
-function initializeApp() {
+async function initializeApp() {
     setupEventListeners();
-    loadCalendar();
-    loadTasks();
-    loadUpcomingEvents();
-    checkNotifications();
-    loadAvailableUsers(); // Load users for task assignment
+    
+    // Load all data in parallel
+    const loadingPromises = [
+        loadCalendar().then(() => { loadingStates.calendar = true; }),
+        loadTasks().then(() => { loadingStates.tasks = true; }),
+        loadUpcomingEvents().then(() => { loadingStates.upcomingEvents = true; }),
+        checkNotifications(),
+        loadAvailableUsers().then(() => { 
+            loadingStates.availableUsers = true;
+            console.log('✓ Available users loaded:', availableUsers.length);
+        })
+    ];
+    
+    // Wait for all critical data to load
+    await Promise.all(loadingPromises);
+    
+    // Hide loading overlay and show content
+    hideLoadingOverlay();
+}
+
+// Hide loading overlay and show content
+function hideLoadingOverlay() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const body = document.body;
+    
+    // Check if all critical states are loaded
+    const criticalStatesLoaded = 
+        loadingStates.auth && 
+        loadingStates.userData && 
+        loadingStates.availableUsers &&
+        loadingStates.calendar;
+    
+    if (criticalStatesLoaded && loadingOverlay) {
+        // Fade out loading overlay
+        loadingOverlay.classList.add('fade-out');
+        
+        // Show main content with animation
+        setTimeout(() => {
+            body.classList.remove('loading');
+            
+            // Add fade-in animation to header and content
+            const header = document.querySelector('.app-header');
+            const content = document.querySelector('.main-content');
+            
+            if (header) {
+                header.style.opacity = '0';
+                header.style.visibility = 'visible';
+                header.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => { header.style.opacity = '1'; }, 50);
+            }
+            
+            if (content) {
+                content.style.opacity = '0';
+                content.style.visibility = 'visible';
+                content.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => { content.style.opacity = '1'; }, 100);
+            }
+        }, 300);
+    }
 }
 
 // Setup event listeners
@@ -1180,16 +1251,28 @@ function filterTasks(filter) {
 
 // Load calendar (stub - implemented in calendar.js)
 function loadCalendar() {
-    if (typeof initCalendar === 'function') {
-        initCalendar();
-    }
+    return new Promise((resolve) => {
+        if (typeof initCalendar === 'function') {
+            initCalendar();
+            // Give calendar time to initialize
+            setTimeout(resolve, 100);
+        } else {
+            resolve();
+        }
+    });
 }
 
 // Load tasks (stub - implemented in tasks.js)
 function loadTasks() {
-    if (typeof loadUserTasks === 'function') {
-        loadUserTasks();
-    }
+    return new Promise((resolve) => {
+        if (typeof loadUserTasks === 'function') {
+            loadUserTasks();
+            // Give tasks time to load
+            setTimeout(resolve, 100);
+        } else {
+            resolve();
+        }
+    });
 }
 
 // Load upcoming events
