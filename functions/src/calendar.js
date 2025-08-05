@@ -3,36 +3,71 @@
 const { google } = require("googleapis");
 const functions = require("firebase-functions");
 
-// Get calendar ID from environment or config
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 
-                    functions.config().google?.calendar_id || 
-                    "primary";
+// Get calendar ID - forced to use primary calendar for proper email invitations
+const CALENDAR_ID = "primary";
 
 // Get impersonation email from environment or config
 const IMPERSONATION_EMAIL = process.env.GOOGLE_IMPERSONATION_EMAIL || 
                             functions.config().google?.impersonation_email;
 
-// Initialize calendar client
-function getCalendarClient() {
-    // Log impersonation setup
-    console.log(`Setting up calendar client with impersonation for: ${IMPERSONATION_EMAIL}`);
-    
-    // Use Application Default Credentials (ADC) with Domain-Wide Delegation
-    // This automatically uses the default service account when running in Firebase Functions
-    const auth = new google.auth.GoogleAuth({
-        scopes: ["https://www.googleapis.com/auth/calendar"],
-        // Impersonate the admin user for domain-wide delegation
-        clientOptions: {
-            subject: IMPERSONATION_EMAIL
+// Initialize calendar client with domain-wide delegation for attendee support
+async function getCalendarClient() {
+    try {
+        console.log(`Setting up calendar client with domain-wide delegation for: ${IMPERSONATION_EMAIL}`);
+        
+        if (!IMPERSONATION_EMAIL) {
+            throw new Error("GOOGLE_IMPERSONATION_EMAIL is not configured");
         }
-    });
-    
-    return google.calendar({ version: "v3", auth });
+        
+        // Use JWT for domain-wide delegation (impersonating a Google Workspace user)
+        const { JWT } = require("google-auth-library");
+        const path = require("path");
+        
+        // Load service account key from file
+        const keyFilePath = path.join(__dirname, "key.json");
+        const serviceAccountKey = require(keyFilePath);
+        
+        console.log(`Using service account: ${serviceAccountKey.client_email}`);
+        
+        // Create JWT client with subject for domain-wide delegation
+        const jwtClient = new JWT({
+            email: serviceAccountKey.client_email,
+            key: serviceAccountKey.private_key,
+            scopes: [
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/calendar.events"
+            ],
+            subject: IMPERSONATION_EMAIL // This specifies the user to impersonate
+        });
+        
+        // Authorize the JWT client
+        await jwtClient.authorize();
+        
+        // Create calendar instance with JWT client
+        const calendar = google.calendar({ version: "v3", auth: jwtClient });
+        
+        console.log(`Calendar client configured for domain-wide delegation as ${IMPERSONATION_EMAIL}`);
+        
+        return calendar;
+    } catch (error) {
+        console.error("Error setting up calendar client:", error);
+        
+        // If domain-wide delegation fails, provide more context about the error
+        if (error.message?.includes("unauthorized_client")) {
+            throw new Error("Domain-wide delegation not properly configured. Ensure the service account's client ID (108389820683819853847) has been authorized in Google Workspace Admin Console with the calendar scopes.");
+        }
+        
+        if (error.message?.includes("Not found") || error.message?.includes("Gaia id")) {
+            throw new Error(`Failed to impersonate ${IMPERSONATION_EMAIL}. Ensure this is a valid Google Workspace user in your domain and domain-wide delegation is properly configured.`);
+        }
+        
+        throw new Error(`Failed to set up calendar authentication: ${error.message}`);
+    }
 }
 
 // Create calendar event
 async function createCalendarEvent(eventData, attendeeEmails) {
-    const calendar = getCalendarClient();
+    const calendar = await getCalendarClient();
     
     // Convert event data to Google Calendar format
     const startDateTime = new Date(`${eventData.date}T${eventData.time || "09:00"}:00`);
@@ -85,7 +120,7 @@ async function createCalendarEvent(eventData, attendeeEmails) {
 
 // Update calendar event
 async function updateCalendarEvent(calendarEventId, eventData, attendeeEmails) {
-    const calendar = getCalendarClient();
+    const calendar = await getCalendarClient();
     
     const startDateTime = new Date(`${eventData.date}T${eventData.time || "09:00"}:00`);
     const endDateTime = new Date(startDateTime);
@@ -130,7 +165,7 @@ async function updateCalendarEvent(calendarEventId, eventData, attendeeEmails) {
 
 // Delete calendar event
 async function deleteCalendarEvent(calendarEventId) {
-    const calendar = getCalendarClient();
+    const calendar = await getCalendarClient();
     
     try {
         await calendar.events.delete({
@@ -155,7 +190,7 @@ async function checkCalendarDiscrepancies(firebaseEvent) {
         return { hasDiscrepancy: false };
     }
     
-    const calendar = getCalendarClient();
+    const calendar = await getCalendarClient();
     
     try {
         const response = await calendar.events.get({

@@ -25,11 +25,8 @@ async function isEmailAllowed(email) {
     try {
         console.log('🔍 [Dashboard] Checking if email is allowed:', email);
         
-        // Call the Cloud Function (use production, not emulator)
-        const functionsInstance = window.getFirebaseFunctions ? 
-            window.getFirebaseFunctions('checkUserAuthorization') : 
-            firebase.functions();
-        const checkUserAuthorization = functionsInstance.httpsCallable('checkUserAuthorization');
+        // Call the Cloud Function (always use production)
+        const checkUserAuthorization = firebase.functions().httpsCallable('checkUserAuthorization');
         const result = await checkUserAuthorization();
         
         console.log('📡 [Dashboard] Authorization check result:', result.data);
@@ -1305,11 +1302,8 @@ async function createCalendarEvent(eventId) {
     try {
         showNotification('Creating calendar event...', 'info');
         
-        // Call cloud function (use emulator if available)
-        const functionsInstance = window.getFirebaseFunctions ? 
-            window.getFirebaseFunctions('createCalendarEvent') : 
-            firebase.functions();
-        const createCalendarEventFn = functionsInstance.httpsCallable('createCalendarEvent');
+        // Call cloud function (always use production)
+        const createCalendarEventFn = firebase.functions().httpsCallable('createCalendarEvent');
         const result = await createCalendarEventFn({ eventId });
         
         if (result.data.success) {
@@ -1378,11 +1372,8 @@ async function syncCalendarEvent(eventId) {
         
         showNotification('Syncing calendar event...', 'info');
         
-        // Call cloud function (use emulator if available)
-        const functionsInstance = window.getFirebaseFunctions ? 
-            window.getFirebaseFunctions('syncCalendarEvent') : 
-            firebase.functions();
-        const syncCalendarEventFn = functionsInstance.httpsCallable('syncCalendarEvent');
+        // Call cloud function (always use production)
+        const syncCalendarEventFn = firebase.functions().httpsCallable('syncCalendarEvent');
         const result = await syncCalendarEventFn({ eventId });
         
         if (result.data.success) {

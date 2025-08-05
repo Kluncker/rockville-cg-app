@@ -41,7 +41,6 @@ build/
 
 # User data
 scripts/allowedUsers.json
-scripts/serviceAccountKey.json
 scripts/update_user_gender.py
 scripts/test_sendgrid.js
-functions/client_id.json
+functions/src/key.json

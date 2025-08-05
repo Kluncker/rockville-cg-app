@@ -1,6 +1,8 @@
 // Firebase Cloud Functions
 
-const functions = require("firebase-functions");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const calendar = require("./src/calendar");
 const email = require("./src/email");
@@ -12,16 +14,19 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // Function to check if a user is authorized to access the app
-exports.checkUserAuthorization = functions.https.onCall(async (data, context) => {
+exports.checkUserAuthorization = onCall({
+    region: "us-central1"
+}, async (request) => {
+    const context = request;
     // Check authentication
     if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be authenticated");
+        throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     
     const userEmail = context.auth.token.email?.toLowerCase();
     
     if (!userEmail) {
-        throw new functions.https.HttpsError("invalid-argument", "No email found for authenticated user");
+        throw new HttpsError("invalid-argument", "No email found for authenticated user");
     }
     
     try {
@@ -70,7 +75,7 @@ exports.checkUserAuthorization = functions.https.onCall(async (data, context) =>
         
     } catch (error) {
         console.error("Error checking user authorization:", error);
-        throw new functions.https.HttpsError("internal", "Failed to check authorization");
+        throw new HttpsError("internal", "Failed to check authorization");
     }
 });
 
@@ -99,10 +104,14 @@ async function ensureUserDocument(uid, authToken) {
 }
 
 // Create Google Calendar event
-exports.createCalendarEvent = functions.https.onCall(async (data, context) => {
+exports.createCalendarEvent = onCall({
+    region: "us-central1"
+}, async (request) => {
+    const data = request.data;
+    const context = request;
     // Check authentication
     if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be authenticated");
+        throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     
     // Check if user is leader or admin
@@ -110,20 +119,20 @@ exports.createCalendarEvent = functions.https.onCall(async (data, context) => {
     const userRole = userDoc.data()?.role;
     
     if (userRole !== "leader" && userRole !== "admin") {
-        throw new functions.https.HttpsError("permission-denied", "Only leaders can create calendar events");
+        throw new HttpsError("permission-denied", "Only leaders can create calendar events");
     }
     
     const { eventId } = data;
     
     if (!eventId) {
-        throw new functions.https.HttpsError("invalid-argument", "Event ID is required");
+        throw new HttpsError("invalid-argument", "Event ID is required");
     }
     
     try {
         // Get event data
         const eventDoc = await db.collection("events").doc(eventId).get();
         if (!eventDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "Event not found");
+            throw new HttpsError("not-found", "Event not found");
         }
         
         const eventData = eventDoc.data();
@@ -169,20 +178,24 @@ exports.createCalendarEvent = functions.https.onCall(async (data, context) => {
                 calendarLink: result.calendarLink
             };
         } else {
-            throw new functions.https.HttpsError("internal", result.error || "Failed to create calendar event");
+            throw new HttpsError("internal", result.error || "Failed to create calendar event");
         }
         
     } catch (error) {
         console.error("Error creating calendar event:", error);
-        throw new functions.https.HttpsError("internal", error.message);
+        throw new HttpsError("internal", error.message);
     }
 });
 
 // Sync calendar event (push Firebase data to Google Calendar)
-exports.syncCalendarEvent = functions.https.onCall(async (data, context) => {
+exports.syncCalendarEvent = onCall({
+    region: "us-central1"
+}, async (request) => {
+    const data = request.data;
+    const context = request;
     // Check authentication
     if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be authenticated");
+        throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     
     // Check if user is leader or admin
@@ -190,26 +203,26 @@ exports.syncCalendarEvent = functions.https.onCall(async (data, context) => {
     const userRole = userDoc.data()?.role;
     
     if (userRole !== "leader" && userRole !== "admin") {
-        throw new functions.https.HttpsError("permission-denied", "Only leaders can sync calendar events");
+        throw new HttpsError("permission-denied", "Only leaders can sync calendar events");
     }
     
     const { eventId } = data;
     
     if (!eventId) {
-        throw new functions.https.HttpsError("invalid-argument", "Event ID is required");
+        throw new HttpsError("invalid-argument", "Event ID is required");
     }
     
     try {
         // Get event data
         const eventDoc = await db.collection("events").doc(eventId).get();
         if (!eventDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "Event not found");
+            throw new HttpsError("not-found", "Event not found");
         }
         
         const eventData = eventDoc.data();
         
         if (!eventData.googleCalendarEventId) {
-            throw new functions.https.HttpsError("failed-precondition", "No calendar event associated with this event");
+            throw new HttpsError("failed-precondition", "No calendar event associated with this event");
         }
         
         // Get attendee emails from event
@@ -255,108 +268,113 @@ exports.syncCalendarEvent = functions.https.onCall(async (data, context) => {
                 calendarLink: result.calendarLink
             };
         } else {
-            throw new functions.https.HttpsError("internal", result.error || "Failed to sync calendar event");
+            throw new HttpsError("internal", result.error || "Failed to sync calendar event");
         }
         
     } catch (error) {
         console.error("Error syncing calendar event:", error);
-        throw new functions.https.HttpsError("internal", error.message);
+        throw new HttpsError("internal", error.message);
     }
 });
 
 // Scheduled function to check calendar discrepancies (runs daily at 8 AM EST)
-exports.checkCalendarDiscrepancies = functions.pubsub
-    .schedule("0 8 * * *")
-    .timeZone("America/New_York")
-    .onRun(async () => {
-        console.log("Starting daily calendar discrepancy check...");
+exports.checkCalendarDiscrepancies = onSchedule({
+    schedule: "0 8 * * *",
+    timeZone: "America/New_York",
+    region: "us-central1"
+}, async () => {
+    console.log("Starting daily calendar discrepancy check...");
+    
+    try {
+        // Get all events with Google Calendar IDs
+        const eventsSnapshot = await db.collection("events")
+            .where("googleCalendarEventId", "!=", null)
+            .get();
         
-        try {
-            // Get all events with Google Calendar IDs
-            const eventsSnapshot = await db.collection("events")
-                .where("googleCalendarEventId", "!=", null)
-                .get();
+        const discrepancyAlerts = [];
+        
+        for (const doc of eventsSnapshot.docs) {
+            const eventData = { id: doc.id, ...doc.data() };
             
-            const discrepancyAlerts = [];
+            // Check for discrepancies
+            const result = await calendar.checkCalendarDiscrepancies(eventData);
             
-            for (const doc of eventsSnapshot.docs) {
-                const eventData = { id: doc.id, ...doc.data() };
+            if (result.hasDiscrepancy) {
+                // Update event with discrepancy status
+                await db.collection("events").doc(doc.id).update({
+                    "calendarSyncStatus.hasDiscrepancy": true,
+                    "calendarSyncStatus.discrepancyDetails": result.discrepancies,
+                    "calendarSyncStatus.lastChecked": admin.firestore.FieldValue.serverTimestamp()
+                });
                 
-                // Check for discrepancies
-                const result = await calendar.checkCalendarDiscrepancies(eventData);
-                
-                if (result.hasDiscrepancy) {
-                    // Update event with discrepancy status
-                    await db.collection("events").doc(doc.id).update({
-                        "calendarSyncStatus.hasDiscrepancy": true,
-                        "calendarSyncStatus.discrepancyDetails": result.discrepancies,
-                        "calendarSyncStatus.lastChecked": admin.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    discrepancyAlerts.push({
-                        event: eventData,
-                        discrepancies: result.discrepancies
-                    });
-                } else {
-                    // Clear any previous discrepancy
-                    await db.collection("events").doc(doc.id).update({
-                        "calendarSyncStatus.hasDiscrepancy": false,
-                        "calendarSyncStatus.discrepancyDetails": [],
-                        "calendarSyncStatus.lastChecked": admin.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-            }
-            
-            // Send discrepancy alerts if any found
-            if (discrepancyAlerts.length > 0) {
-                console.log(`Found ${discrepancyAlerts.length} events with discrepancies`);
-                
-                // Get leader emails
-                const leaderEmails = await email.getLeaderEmails();
-                
-                // Send alert for each event with discrepancies
-                for (const alert of discrepancyAlerts) {
-                    // Get event creator email
-                    const creatorDoc = await db.collection("users").doc(alert.event.createdBy).get();
-                    const creatorEmail = creatorDoc.data()?.email;
-                    
-                    const recipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
-                    
-                    await email.sendDiscrepancyAlert(
-                        alert.event,
-                        alert.discrepancies,
-                        recipients
-                    );
-                }
+                discrepancyAlerts.push({
+                    event: eventData,
+                    discrepancies: result.discrepancies
+                });
             } else {
-                console.log("No calendar discrepancies found");
+                // Clear any previous discrepancy
+                await db.collection("events").doc(doc.id).update({
+                    "calendarSyncStatus.hasDiscrepancy": false,
+                    "calendarSyncStatus.discrepancyDetails": [],
+                    "calendarSyncStatus.lastChecked": admin.firestore.FieldValue.serverTimestamp()
+                });
             }
-            
-            return null;
-        } catch (error) {
-            console.error("Error checking calendar discrepancies:", error);
-            return null;
         }
-    });
+        
+        // Send discrepancy alerts if any found
+        if (discrepancyAlerts.length > 0) {
+            console.log(`Found ${discrepancyAlerts.length} events with discrepancies`);
+            
+            // Get leader emails
+            const leaderEmails = await email.getLeaderEmails();
+            
+            // Send alert for each event with discrepancies
+            for (const alert of discrepancyAlerts) {
+                // Get event creator email
+                const creatorDoc = await db.collection("users").doc(alert.event.createdBy).get();
+                const creatorEmail = creatorDoc.data()?.email;
+                
+                const recipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
+                
+                await email.sendDiscrepancyAlert(
+                    alert.event,
+                    alert.discrepancies,
+                    recipients
+                );
+            }
+        } else {
+            console.log("No calendar discrepancies found");
+        }
+        
+        return null;
+    } catch (error) {
+        console.error("Error checking calendar discrepancies:", error);
+        return null;
+    }
+});
 
 // Delete calendar event (callable function)
-exports.deleteCalendarEvent = functions.https.onCall(async (data, context) => {
+exports.deleteCalendarEvent = onCall({
+    region: "us-central1"
+}, async (request) => {
+    const data = request.data;
+    const context = request;
     // Check authentication
     if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "User must be authenticated");
+        throw new HttpsError("unauthenticated", "User must be authenticated");
     }
     
     const { eventId } = data;
     
     if (!eventId) {
-        throw new functions.https.HttpsError("invalid-argument", "Event ID is required");
+        throw new HttpsError("invalid-argument", "Event ID is required");
     }
     
     try {
         // Get event data
         const eventDoc = await db.collection("events").doc(eventId).get();
         if (!eventDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "Event not found");
+            throw new HttpsError("not-found", "Event not found");
         }
         
         const eventData = eventDoc.data();
@@ -368,11 +386,11 @@ exports.deleteCalendarEvent = functions.https.onCall(async (data, context) => {
                           (userRole === "leader" || userRole === "admin");
         
         if (!canDelete) {
-            throw new functions.https.HttpsError("permission-denied", "You don't have permission to delete this event");
+            throw new HttpsError("permission-denied", "You don't have permission to delete this event");
         }
         
         if (!eventData.googleCalendarEventId) {
-            throw new functions.https.HttpsError("failed-precondition", "No calendar event associated with this event");
+            throw new HttpsError("failed-precondition", "No calendar event associated with this event");
         }
         
         // Delete the calendar event
@@ -390,24 +408,25 @@ exports.deleteCalendarEvent = functions.https.onCall(async (data, context) => {
             
             return { success: true };
         } else {
-            throw new functions.https.HttpsError("internal", result.error || "Failed to delete calendar event");
+            throw new HttpsError("internal", result.error || "Failed to delete calendar event");
         }
         
     } catch (error) {
         console.error("Error deleting calendar event:", error);
-        throw new functions.https.HttpsError("internal", error.message);
+        throw new HttpsError("internal", error.message);
     }
 });
 
 // Function to handle event deletion (cleanup tasks)
-exports.onEventDeleted = functions.firestore
-    .document("events/{eventId}")
-    .onDelete(async (snap) => {
-        const deletedEvent = snap.data();
-        
-        // Note: Calendar event deletion is now handled separately via deleteCalendarEvent function
-        // This function now only logs the deletion
-        console.log(`Event deleted: ${deletedEvent.title}`);
-        
-        return null;
-    });
+exports.onEventDeleted = onDocumentDeleted({
+    document: "events/{eventId}",
+    region: "us-central1"
+}, async (event) => {
+    const deletedEvent = event.data.data();
+    
+    // Note: Calendar event deletion is now handled separately via deleteCalendarEvent function
+    // This function now only logs the deletion
+    console.log(`Event deleted: ${deletedEvent.title}`);
+    
+    return null;
+});
