@@ -1294,23 +1294,95 @@ function canEditEvent(event) {
 // Delete event
 async function deleteEvent(eventId) {
     try {
-        // Get event data to check for calendar event
+        // Get event data to check for calendar event and permissions
         const eventDoc = await db.collection('events').doc(eventId).get();
+        if (!eventDoc.exists) {
+            showNotification('Event not found', 'error');
+            return;
+        }
+        
         const eventData = eventDoc.data();
         
+        // Double-check permissions
+        if (!canDeleteEvent(eventData)) {
+            showNotification('You do not have permission to delete this event', 'error');
+            return;
+        }
+        
+        // Build confirmation message based on who's deleting
+        let confirmMessage = '';
         let deleteCalendar = false;
+        
+        if (currentUser.uid === eventData.createdBy) {
+            // User is the creator
+            confirmMessage = 'Are you sure you want to delete your event';
+        } else {
+            // User is a leader deleting someone else's event
+            const creatorDoc = await db.collection('users').doc(eventData.createdBy).get();
+            const creatorName = creatorDoc.exists ? creatorDoc.data().displayName : 'Unknown User';
+            confirmMessage = `Are you sure you want to delete this event created by ${creatorName}`;
+        }
         
         // Check if event has Google Calendar event
         if (eventData.googleCalendarEventId) {
-            deleteCalendar = confirm('Would you like to also delete the associated calendar event?');
+            confirmMessage += ' and cancel the calendar event for all attendees?';
+            confirmMessage += '\n\nThis will send cancellation emails to all attendees.';
+            deleteCalendar = confirm(confirmMessage);
+            if (!deleteCalendar && !confirm('Delete the event from the app only (keep calendar event)?')) {
+                return;
+            }
         } else {
-            // Just confirm regular deletion
-            if (!confirm('Are you sure you want to delete this event?')) {
+            confirmMessage += '?';
+            if (!confirm(confirmMessage)) {
                 return;
             }
         }
         
-        // Start a batch operation
+        // Delete calendar event first if requested
+        if (deleteCalendar && eventData.googleCalendarEventId) {
+            // Request Google Calendar authorization if not already authorized
+            if (!window.googleCalendarAuth || !window.googleCalendarAuth.isAuthorized()) {
+                showNotification('Please authorize Google Calendar access to delete the event', 'info');
+                window.googleCalendarAuth.requestAuth(() => deleteEvent(eventId));
+                return;
+            }
+            
+            try {
+                showNotification('Deleting calendar event...', 'info');
+                
+                // Get the OAuth token
+                const token = window.googleCalendarAuth.getToken();
+                
+                // Call the new cloud function that uses user's OAuth token
+                const deleteCalendarEventFn = firebase.functions().httpsCallable('deleteCalendarEventWithUserAuth');
+                const result = await deleteCalendarEventFn({ eventId, token });
+                
+                if (result.data.success) {
+                    showNotification('Calendar event cancelled and notifications sent to all attendees', 'success');
+                } else {
+                    // Ask if they still want to delete the app event
+                    if (!confirm('Failed to delete calendar event. Delete the event from the app anyway?')) {
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Error deleting calendar event:', error);
+                
+                // Handle auth errors specifically
+                if (error.message?.includes('re-authorize')) {
+                    showNotification('Please re-authorize Google Calendar access', 'error');
+                    window.googleCalendarAuth.requestAuth(() => deleteEvent(eventId));
+                    return;
+                }
+                
+                // Ask if they still want to delete the app event
+                if (!confirm('Error deleting calendar event. Delete the event from the app anyway?')) {
+                    return;
+                }
+            }
+        }
+        
+        // Start a batch operation for Firestore deletion
         const batch = db.batch();
         
         // Delete the event
@@ -1329,15 +1401,13 @@ async function deleteEvent(eventId) {
         // Commit the batch
         await batch.commit();
         
-        // Note: The calendar event will be deleted by the onEventDeleted cloud function
-        // if deleteCalendar is true (it checks for googleCalendarEventId)
-        
         showNotification('Event deleted successfully', 'success');
         
         // Refresh the calendar and close the preview modal
         hideEventPreviewModal();
         loadCalendar();
         loadUpcomingEvents();
+        loadTasks(); // Also refresh tasks
         
     } catch (error) {
         console.error('Error deleting event:', error);

@@ -185,8 +185,16 @@ exports.createCalendarEvent = onCall({
                 lastCalendarSync: admin.firestore.FieldValue.serverTimestamp()
             });
             
-            // Send confirmation emails
-            await email.sendEventCreatedEmail(eventData, attendeeEmails);
+            // Get leader emails and event creator email
+            const leaderEmails = await email.getLeaderEmails();
+            const creatorDoc = await db.collection("users").doc(eventData.createdBy).get();
+            const creatorEmail = creatorDoc.data()?.email;
+            
+            // Combine and deduplicate email recipients (leaders + creator)
+            const emailRecipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
+            
+            // Send confirmation emails only to leaders and creator
+            await email.sendEventCreatedEmail(eventData, emailRecipients);
             
             return {
                 success: true,
@@ -375,7 +383,92 @@ exports.checkCalendarDiscrepancies = onSchedule({
     }
 });
 
-// Delete calendar event (callable function)
+// Delete calendar event with user's OAuth token
+exports.deleteCalendarEventWithUserAuth = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const data = request.data;
+    const context = request;
+    
+    // Check authentication
+    if (!context.auth) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+    
+    const { eventId, token } = data;
+    
+    if (!eventId) {
+        throw new HttpsError("invalid-argument", "Event ID is required");
+    }
+    
+    if (!token) {
+        throw new HttpsError("invalid-argument", "OAuth token is required");
+    }
+    
+    try {
+        // Get event data
+        const eventDoc = await db.collection("events").doc(eventId).get();
+        if (!eventDoc.exists) {
+            throw new HttpsError("not-found", "Event not found");
+        }
+        
+        const eventData = eventDoc.data();
+        
+        // Check if user can delete this event
+        const userDoc = await db.collection("users").doc(context.auth.uid).get();
+        const userRole = userDoc.data()?.role;
+        const canDelete = (context.auth.uid === eventData.createdBy) || 
+                          (userRole === "leader" || userRole === "admin");
+        
+        if (!canDelete) {
+            throw new HttpsError("permission-denied", "You don't have permission to delete this event");
+        }
+        
+        if (!eventData.googleCalendarEventId) {
+            throw new HttpsError("failed-precondition", "No calendar event associated with this event");
+        }
+        
+        // Delete the calendar event with user's auth
+        const result = await calendarUserAuth.deleteCalendarEventWithUserAuth(
+            token,
+            eventData.googleCalendarEventId
+        );
+        
+        if (result.success) {
+            // Clear calendar info from event (in case deletion happens before event deletion)
+            await db.collection("events").doc(eventId).update({
+                googleCalendarEventId: admin.firestore.FieldValue.delete(),
+                calendarLink: admin.firestore.FieldValue.delete(),
+                calendarSyncStatus: admin.firestore.FieldValue.delete()
+            }).catch(() => {
+                // Event might already be deleted, that's ok
+            });
+            
+            return { success: true };
+        } else {
+            if (result.requiresReauth) {
+                throw new HttpsError("unauthenticated", result.error);
+            }
+            throw new HttpsError("internal", result.error || "Failed to delete calendar event");
+        }
+        
+    } catch (error) {
+        console.error("Error deleting calendar event with user auth:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", error.message);
+    }
+});
+
+// Delete calendar event (callable function) - DEPRECATED, kept for backwards compatibility
 exports.deleteCalendarEvent = onCall({
     region: "us-central1",
     cors: [
@@ -446,16 +539,18 @@ exports.deleteCalendarEvent = onCall({
     }
 });
 
-// Function to handle event deletion (cleanup tasks)
+// Function to handle event deletion (cleanup logging)
 exports.onEventDeleted = onDocumentDeleted({
     document: "events/{eventId}",
     region: "us-central1"
 }, async (event) => {
     const deletedEvent = event.data.data();
     
-    // Note: Calendar event deletion is now handled separately via deleteCalendarEvent function
-    // This function now only logs the deletion
-    console.log(`Event deleted: ${deletedEvent.title}`);
+    // Log the deletion for audit purposes
+    console.log(`Event deleted: ${deletedEvent.title} (ID: ${event.params.eventId})`);
+    
+    // Note: Calendar event deletion is handled separately via deleteCalendarEvent function
+    // which is called explicitly when the user confirms they want to delete the calendar event
     
     return null;
 });
@@ -532,8 +627,16 @@ exports.createCalendarEventWithUserAuth = onCall({
         const result = await calendarUserAuth.createCalendarEventWithUserAuth(token, eventData, attendeeEmails);
         
         if (result.success) {
-            // Send confirmation emails
-            await email.sendEventCreatedEmail(eventData, attendeeEmails);
+            // Get leader emails and event creator email
+            const leaderEmails = await email.getLeaderEmails();
+            const creatorDoc = await db.collection("users").doc(eventData.createdBy).get();
+            const creatorEmail = creatorDoc.data()?.email;
+            
+            // Combine and deduplicate email recipients (leaders + creator)
+            const emailRecipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
+            
+            // Send confirmation emails only to leaders and creator
+            await email.sendEventCreatedEmail(eventData, emailRecipients);
             
             return {
                 success: true,
