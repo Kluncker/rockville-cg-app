@@ -845,6 +845,7 @@ function createPreviewEventCard(event) {
         <div class="preview-event-header">
             <div>
                 <h3 class="preview-event-title">${event.title}</h3>
+                <span class="event-type-label ${event.type}">${getEventTypeLabel(event.type)}</span>
                 <div class="preview-event-time">
                     <span class="material-icons">schedule</span>
                     <span>${eventTime}</span>
@@ -863,23 +864,6 @@ function createPreviewEventCard(event) {
                 ` : ''}
             </div>
             <div class="preview-event-actions">
-                <span class="event-type-badge ${event.type}">${getEventTypeLabel(event.type)}</span>
-                ${isUserLeader ? `
-                    ${!hasCalendarEvent ? `
-                        <button class="calendar-btn create-calendar-btn" onclick="event.stopPropagation(); createCalendarEvent('${event.id}')" title="Create Calendar Event">
-                            <span class="material-icons">event</span>
-                        </button>
-                    ` : `
-                        <button class="calendar-btn sync-calendar-btn ${!hasDiscrepancy ? 'synced' : ''}" onclick="event.stopPropagation(); syncCalendarEvent('${event.id}')" title="Sync to Calendar">
-                            <span class="material-icons">sync</span>
-                        </button>
-                        ${event.calendarLink ? `
-                            <a href="${event.calendarLink}" target="_blank" class="calendar-btn view-calendar-btn" onclick="event.stopPropagation();" title="View in Calendar">
-                                <span class="material-icons">open_in_new</span>
-                            </a>
-                        ` : ''}
-                    `}
-                ` : ''}
                 ${showDeleteButton ? `
                     <button class="delete-event-btn" onclick="event.stopPropagation(); deleteEvent('${event.id}')">
                         <span class="material-icons">delete</span>
@@ -894,6 +878,29 @@ function createPreviewEventCard(event) {
                 <ul>
                     ${event.calendarSyncStatus.discrepancyDetails.map(d => `<li>${d}</li>`).join('')}
                 </ul>
+            </div>
+        ` : ''}
+        ${isUserLeader ? `
+            <div class="calendar-actions-bottom">
+                ${!hasCalendarEvent ? `
+                    <button class="calendar-action-btn create" onclick="event.stopPropagation(); createCalendarEvent('${event.id}')">
+                        <span class="material-icons">event</span>
+                        <span>Create Calendar Event</span>
+                    </button>
+                ` : `
+                    <div class="calendar-action-buttons">
+                        <button class="calendar-action-btn sync ${!hasDiscrepancy ? 'synced' : ''}" onclick="event.stopPropagation(); syncCalendarEvent('${event.id}')">
+                            <span class="material-icons">sync</span>
+                            <span>Sync to Calendar</span>
+                        </button>
+                        ${event.calendarLink ? `
+                            <a href="${event.calendarLink}" target="_blank" class="calendar-action-btn view" onclick="event.stopPropagation();">
+                                <span class="material-icons">open_in_new</span>
+                                <span>View in Calendar</span>
+                            </a>
+                        ` : ''}
+                    </div>
+                `}
             </div>
         ` : ''}
     `;

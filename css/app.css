@@ -958,7 +958,44 @@ section::before {
     font-size: 1.2rem;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Event type label below title in preview */
+.event-type-label {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: capitalize;
+    margin-bottom: 0.75rem;
+    white-space: nowrap;
+}
+
+.event-type-label.bible-study {
+    background: rgba(21, 101, 192, 0.15);
+    color: var(--bible-study);
+}
+
+.event-type-label.mens-fellowship {
+    background: rgba(46, 125, 50, 0.15);
+    color: var(--mens-fellowship);
+}
+
+.event-type-label.womens-fellowship {
+    background: rgba(233, 30, 99, 0.15);
+    color: var(--womens-fellowship);
+}
+
+.event-type-label.sunday-service {
+    background: rgba(249, 168, 37, 0.15);
+    color: var(--sunday-service);
+}
+
+.event-type-label.community {
+    background: rgba(94, 53, 177, 0.15);
+    color: var(--community);
 }
 
 .preview-event-time {
@@ -1193,6 +1230,82 @@ section::before {
 
 .discrepancy-details li {
     margin-bottom: 0.25rem;
+}
+
+/* Calendar Actions at Bottom of Event Card */
+.calendar-actions-bottom {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-light);
+}
+
+.calendar-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    width: 100%;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.calendar-action-btn.create {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4caf50;
+}
+
+.calendar-action-btn.create:hover {
+    background: rgba(76, 175, 80, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.calendar-action-btn.sync {
+    background: rgba(255, 152, 0, 0.1);
+    color: #ff9800;
+}
+
+.calendar-action-btn.sync:hover {
+    background: rgba(255, 152, 0, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.calendar-action-btn.sync.synced {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4caf50;
+}
+
+.calendar-action-btn.sync.synced:hover {
+    background: rgba(76, 175, 80, 0.2);
+}
+
+.calendar-action-btn.view {
+    background: rgba(33, 150, 243, 0.1);
+    color: #2196f3;
+}
+
+.calendar-action-btn.view:hover {
+    background: rgba(33, 150, 243, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.calendar-action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.calendar-action-btn .material-icons {
+    font-size: 20px;
 }
 
 /* Animations */
