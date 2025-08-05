@@ -284,16 +284,20 @@ function setupEventListeners() {
         });
     });
     
-    // Attendee template selector
-    const attendeeTemplate = document.getElementById('attendeeTemplate');
-    if (attendeeTemplate) {
-        attendeeTemplate.addEventListener('change', handleAttendeeTemplateChange);
-    }
-    
     // View/Edit attendees button
     const viewAttendeesBtn = document.getElementById('viewAttendeesBtn');
     if (viewAttendeesBtn) {
         viewAttendeesBtn.addEventListener('click', toggleAttendeesView);
+    }
+    
+    // Calendar invite modal buttons
+    const sendNowBtn = document.getElementById('sendNowBtn');
+    const sendLaterBtn = document.getElementById('sendLaterBtn');
+    if (sendNowBtn) {
+        sendNowBtn.addEventListener('click', handleSendCalendarNow);
+    }
+    if (sendLaterBtn) {
+        sendLaterBtn.addEventListener('click', handleSendCalendarLater);
     }
 }
 
@@ -310,8 +314,13 @@ function showEventModal(date = null, eventData = null) {
         
         // Reset attendee selections
         selectedAttendees = [];
-        document.getElementById('attendeePreview').style.display = 'none';
         document.getElementById('attendeesList').style.display = 'none';
+        
+        // Set up attendee count display
+        const attendeeCount = document.querySelector('.attendee-count');
+        if (attendeeCount) {
+            attendeeCount.textContent = '0 attendees selected';
+        }
         
         if (eventData) {
             // Edit mode - check permissions first
@@ -332,10 +341,12 @@ function showEventModal(date = null, eventData = null) {
             // Clear event ID to indicate new event
             delete form.dataset.eventId;
             
-            // Set up event type change listener for auto-selecting attendee template
+            // Set up event type change listener for auto-selecting attendees
             const eventTypeSelect = document.getElementById('eventType');
             if (eventTypeSelect) {
                 eventTypeSelect.addEventListener('change', handleEventTypeChange);
+                // Also hide attendees list initially
+                document.getElementById('attendeesList').style.display = 'none';
             }
         }
         
@@ -369,17 +380,22 @@ function populateEventForm(eventData) {
     document.getElementById('eventLocation').value = eventData.location || '';
     document.getElementById('eventDescription').value = eventData.description || '';
     
+    // Populate duration
+    if (eventData.duration) {
+        const hours = Math.floor(eventData.duration / 60);
+        const minutes = eventData.duration % 60;
+        document.getElementById('eventDurationHours').value = hours;
+        document.getElementById('eventDurationMinutes').value = minutes;
+    }
+    
     // Populate attendees if they exist
-    if (eventData.attendeeTemplate) {
-        const attendeeTemplate = document.getElementById('attendeeTemplate');
-        attendeeTemplate.value = eventData.attendeeTemplate;
-        
-        // Set selected attendees
+    if (eventData.attendees) {
         selectedAttendees = eventData.attendees || [];
-        
-        // Trigger change event to populate the attendee list
-        const changeEvent = new Event('change', { bubbles: true });
-        attendeeTemplate.dispatchEvent(changeEvent);
+        // Trigger event type change to populate attendees properly
+        const eventTypeSelect = document.getElementById('eventType');
+        if (eventTypeSelect.value) {
+            handleEventTypeChange({ target: eventTypeSelect });
+        }
     }
     
     // Populate tasks if they exist
@@ -461,9 +477,9 @@ async function handleEventSubmit(e) {
         type: document.getElementById('eventType').value,
         date: document.getElementById('eventDate').value,
         time: document.getElementById('eventTime').value,
+        duration: parseInt(document.getElementById('eventDurationHours').value || 0) * 60 + parseInt(document.getElementById('eventDurationMinutes').value || 0), // Duration in minutes
         location: document.getElementById('eventLocation').value,
         description: document.getElementById('eventDescription').value,
-        attendeeTemplate: document.getElementById('attendeeTemplate').value,
         attendees: selectedAttendees,
         tasks: []
     };
@@ -546,10 +562,20 @@ async function handleEventSubmit(e) {
         showNotification(isEditing ? 'Event updated successfully!' : 'Event created successfully!', 'success');
         hideEventModal();
         
+        // Store the event ID for calendar creation
+        window.lastCreatedEventId = eventIdToUse;
+        
         // Reload data
         loadCalendar();
         loadUpcomingEvents();
         loadTasks();
+        
+        // Show calendar invite popup only for new events and if user is a leader
+        if (!isEditing && isLeader()) {
+            setTimeout(() => {
+                showCalendarInviteModal();
+            }, 500);
+        }
         
     } catch (error) {
         console.error(isEditing ? 'Error updating event:' : 'Error creating event:', error);
@@ -975,13 +1001,12 @@ function populateAttendeesList(users, template) {
         checkbox.value = user.uid;
         checkbox.checked = selectedAttendees.includes(user.uid);
         
-        if (template !== 'custom') {
-            checkbox.disabled = true; // Disable for non-custom templates
-        }
-        
+        // All checkboxes are always editable
         checkbox.addEventListener('change', (e) => {
             if (e.target.checked) {
-                selectedAttendees.push(user.uid);
+                if (!selectedAttendees.includes(user.uid)) {
+                    selectedAttendees.push(user.uid);
+                }
             } else {
                 selectedAttendees = selectedAttendees.filter(id => id !== user.uid);
             }
@@ -1007,6 +1032,10 @@ function populateAttendeesList(users, template) {
 function toggleAttendeesView() {
     const attendeesList = document.getElementById('attendeesList');
     if (attendeesList.style.display === 'none' || !attendeesList.style.display) {
+        // If the list hasn't been populated yet, populate it with all users
+        if (!attendeesList.innerHTML || attendeesList.innerHTML.trim() === '') {
+            populateAttendeesList(availableUsers, 'custom');
+        }
         attendeesList.style.display = 'block';
     } else {
         attendeesList.style.display = 'none';
@@ -1020,12 +1049,15 @@ function updateAttendeeCount() {
     attendeeCount.textContent = `${selectedAttendees.length} attendees selected`;
 }
 
-// Handle event type change to auto-select attendee template
-function handleEventTypeChange(e) {
+// Handle event type change to auto-select attendees
+async function handleEventTypeChange(e) {
     const eventType = e.target.value;
-    const attendeeTemplate = document.getElementById('attendeeTemplate');
     
-    if (!attendeeTemplate) return;
+    if (!eventType) {
+        selectedAttendees = [];
+        updateAttendeeCount();
+        return;
+    }
     
     // Map event types to attendee templates
     const templateMap = {
@@ -1033,16 +1065,34 @@ function handleEventTypeChange(e) {
         'mens-fellowship': 'men',
         'womens-fellowship': 'women',
         'sunday-service': 'everyone',
-        'community': 'custom'
+        'community': 'everyone'
     };
     
-    // Set the attendee template based on event type
-    if (eventType && templateMap[eventType]) {
-        attendeeTemplate.value = templateMap[eventType];
-        // Trigger the change event to populate attendees
-        const changeEvent = new Event('change', { bubbles: true });
-        attendeeTemplate.dispatchEvent(changeEvent);
+    const template = templateMap[eventType] || 'everyone';
+    
+    // Determine which users should be selected by default based on template
+    let defaultSelectedUsers = [];
+    
+    switch(template) {
+        case 'everyone':
+            defaultSelectedUsers = availableUsers;
+            break;
+        case 'men':
+            defaultSelectedUsers = await getUsersByGender('male');
+            break;
+        case 'women':
+            defaultSelectedUsers = await getUsersByGender('female');
+            break;
     }
+    
+    // Update selected attendees to only include the default selected users
+    selectedAttendees = defaultSelectedUsers.map(user => user.uid);
+    
+    // Update attendee count
+    updateAttendeeCount();
+    
+    // Always populate with ALL users, but only check the default selected ones
+    populateAttendeesList(availableUsers, template);
 }
 
 // Expose functions to global scope
@@ -1294,20 +1344,37 @@ async function deleteEvent(eventId) {
 
 // Create calendar event
 async function createCalendarEvent(eventId) {
+    // Request Google Calendar authorization if not already authorized
+    if (!window.googleCalendarAuth || !window.googleCalendarAuth.isAuthorized()) {
+        window.googleCalendarAuth.requestAuth(() => createCalendarEvent(eventId));
+        return;
+    }
+    
     // Confirm creation
-    if (!confirm('Create a Google Calendar event for this event? Invitations will be sent to all attendees.')) {
+    if (!confirm('Create a Google Calendar event in your personal calendar? Invitations will be sent to all attendees.')) {
         return;
     }
     
     try {
         showNotification('Creating calendar event...', 'info');
         
-        // Call cloud function (always use production)
-        const createCalendarEventFn = firebase.functions().httpsCallable('createCalendarEvent');
-        const result = await createCalendarEventFn({ eventId });
+        // Get the OAuth token
+        const token = window.googleCalendarAuth.getToken();
+        
+        // Call the new cloud function that uses user's OAuth token
+        const createCalendarEventFn = firebase.functions().httpsCallable('createCalendarEventWithUserAuth');
+        const result = await createCalendarEventFn({ eventId, token });
         
         if (result.data.success) {
-            showNotification('Calendar event created successfully!', 'success');
+            showNotification('Calendar event created successfully in your calendar!', 'success');
+            
+            // Update the event in Firestore with calendar info
+            await db.collection('events').doc(eventId).update({
+                googleCalendarEventId: result.data.calendarEventId,
+                calendarLink: result.data.calendarLink,
+                lastCalendarSync: firebase.firestore.FieldValue.serverTimestamp(),
+                calendarCreatedBy: currentUser.uid
+            });
             
             // Open calendar link in new tab
             if (result.data.calendarLink) {
@@ -1344,13 +1411,25 @@ async function createCalendarEvent(eventId) {
 
 // Sync calendar event
 async function syncCalendarEvent(eventId) {
+    // Request Google Calendar authorization if not already authorized
+    if (!window.googleCalendarAuth || !window.googleCalendarAuth.isAuthorized()) {
+        window.googleCalendarAuth.requestAuth(() => syncCalendarEvent(eventId));
+        return;
+    }
+    
     try {
         // Get event data to show what will be synced
         const eventDoc = await db.collection('events').doc(eventId).get();
         const eventData = eventDoc.data();
         
+        // Check if the current user created the calendar event
+        if (eventData.calendarCreatedBy && eventData.calendarCreatedBy !== currentUser.uid) {
+            showNotification('Only the user who created the calendar event can sync it', 'error');
+            return;
+        }
+        
         // Build sync confirmation message
-        let message = 'The following information will be synced to Google Calendar:\n\n';
+        let message = 'The following information will be synced to your Google Calendar:\n\n';
         message += `Title: ${eventData.title}\n`;
         message += `Date: ${new Date(eventData.date).toLocaleDateString()}\n`;
         message += `Time: ${eventData.time || 'Not set'}\n`;
@@ -1372,12 +1451,23 @@ async function syncCalendarEvent(eventId) {
         
         showNotification('Syncing calendar event...', 'info');
         
-        // Call cloud function (always use production)
-        const syncCalendarEventFn = firebase.functions().httpsCallable('syncCalendarEvent');
-        const result = await syncCalendarEventFn({ eventId });
+        // Get the OAuth token
+        const token = window.googleCalendarAuth.getToken();
+        
+        // Call the new cloud function that uses user's OAuth token
+        const syncCalendarEventFn = firebase.functions().httpsCallable('syncCalendarEventWithUserAuth');
+        const result = await syncCalendarEventFn({ eventId, token });
         
         if (result.data.success) {
             showNotification('Calendar event synced successfully!', 'success');
+            
+            // Update sync status
+            await db.collection('events').doc(eventId).update({
+                lastCalendarSync: firebase.firestore.FieldValue.serverTimestamp(),
+                'calendarSyncStatus.hasDiscrepancy': false,
+                'calendarSyncStatus.discrepancyDetails': [],
+                'calendarSyncStatus.lastChecked': firebase.firestore.FieldValue.serverTimestamp()
+            });
             
             // Refresh the event list to show updated status
             loadCalendar();
@@ -1407,6 +1497,46 @@ async function syncCalendarEvent(eventId) {
     }
 }
 
+// Show calendar invite modal
+function showCalendarInviteModal() {
+    const modal = document.getElementById('calendarInviteModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => {
+            modal.classList.add('show');
+        }, 10);
+    }
+}
+
+// Hide calendar invite modal
+function hideCalendarInviteModal() {
+    const modal = document.getElementById('calendarInviteModal');
+    if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
+}
+
+// Handle send calendar now
+async function handleSendCalendarNow() {
+    hideCalendarInviteModal();
+    
+    if (window.lastCreatedEventId) {
+        // Trigger calendar creation with the last created event
+        await createCalendarEvent(window.lastCreatedEventId);
+        window.lastCreatedEventId = null;
+    }
+}
+
+// Handle send calendar later
+function handleSendCalendarLater() {
+    hideCalendarInviteModal();
+    showNotification('You can create a calendar event later from the calendar view', 'info');
+    window.lastCreatedEventId = null;
+}
+
 // Expose functions to global scope for other modules
 window.showNotification = showNotification;
 window.showEventModal = showEventModal;
@@ -1420,4 +1550,9 @@ window.syncCalendarEvent = syncCalendarEvent;
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
     initializeFirebase();
+    
+    // Initialize Google Calendar authentication
+    if (window.googleCalendarAuth) {
+        window.googleCalendarAuth.initialize();
+    }
 });

@@ -5,6 +5,7 @@ const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const calendar = require("./src/calendar");
+const calendarUserAuth = require("./src/calendar-user-auth");
 const email = require("./src/email");
 
 // Initialize Firebase Admin
@@ -15,7 +16,14 @@ const db = admin.firestore();
 
 // Function to check if a user is authorized to access the app
 exports.checkUserAuthorization = onCall({
-    region: "us-central1"
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
 }, async (request) => {
     const context = request;
     // Check authentication
@@ -105,7 +113,14 @@ async function ensureUserDocument(uid, authToken) {
 
 // Create Google Calendar event
 exports.createCalendarEvent = onCall({
-    region: "us-central1"
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
 }, async (request) => {
     const data = request.data;
     const context = request;
@@ -189,7 +204,14 @@ exports.createCalendarEvent = onCall({
 
 // Sync calendar event (push Firebase data to Google Calendar)
 exports.syncCalendarEvent = onCall({
-    region: "us-central1"
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
 }, async (request) => {
     const data = request.data;
     const context = request;
@@ -355,7 +377,14 @@ exports.checkCalendarDiscrepancies = onSchedule({
 
 // Delete calendar event (callable function)
 exports.deleteCalendarEvent = onCall({
-    region: "us-central1"
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
 }, async (request) => {
     const data = request.data;
     const context = request;
@@ -429,4 +458,201 @@ exports.onEventDeleted = onDocumentDeleted({
     console.log(`Event deleted: ${deletedEvent.title}`);
     
     return null;
+});
+
+// Create Google Calendar event with user's OAuth token
+exports.createCalendarEventWithUserAuth = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const data = request.data;
+    const context = request;
+    
+    // Check authentication
+    if (!context.auth) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+    
+    // Check if user is leader or admin
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    const userRole = userDoc.data()?.role;
+    
+    if (userRole !== "leader" && userRole !== "admin") {
+        throw new HttpsError("permission-denied", "Only leaders can create calendar events");
+    }
+    
+    const { eventId, token } = data;
+    
+    if (!eventId) {
+        throw new HttpsError("invalid-argument", "Event ID is required");
+    }
+    
+    if (!token) {
+        throw new HttpsError("invalid-argument", "OAuth token is required");
+    }
+    
+    try {
+        // Get event data
+        const eventDoc = await db.collection("events").doc(eventId).get();
+        if (!eventDoc.exists) {
+            throw new HttpsError("not-found", "Event not found");
+        }
+        
+        const eventData = eventDoc.data();
+        
+        // Get attendee emails from event
+        const eventAttendees = eventData.attendees || [];
+        
+        // Get task assignees and merge with event attendees
+        const tasksSnapshot = await db.collection("tasks")
+            .where("eventId", "==", eventId)
+            .get();
+        
+        const taskAssignees = [];
+        tasksSnapshot.forEach(doc => {
+            const task = doc.data();
+            if (task.assignedTo && !taskAssignees.includes(task.assignedTo)) {
+                taskAssignees.push(task.assignedTo);
+            }
+        });
+        
+        // Merge and deduplicate attendees
+        const allAttendees = [...new Set([...eventAttendees, ...taskAssignees])];
+        
+        // Get all attendee emails
+        const attendeeEmails = await email.getAttendeeEmails(allAttendees);
+        
+        // Create calendar event with user's auth
+        const result = await calendarUserAuth.createCalendarEventWithUserAuth(token, eventData, attendeeEmails);
+        
+        if (result.success) {
+            // Send confirmation emails
+            await email.sendEventCreatedEmail(eventData, attendeeEmails);
+            
+            return {
+                success: true,
+                calendarEventId: result.calendarEventId,
+                calendarLink: result.calendarLink
+            };
+        } else {
+            if (result.requiresReauth) {
+                throw new HttpsError("unauthenticated", result.error);
+            }
+            throw new HttpsError("internal", result.error || "Failed to create calendar event");
+        }
+        
+    } catch (error) {
+        console.error("Error creating calendar event with user auth:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", error.message);
+    }
+});
+
+// Sync calendar event with user's OAuth token
+exports.syncCalendarEventWithUserAuth = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const data = request.data;
+    const context = request;
+    
+    // Check authentication
+    if (!context.auth) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+    
+    // Check if user is leader or admin
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    const userRole = userDoc.data()?.role;
+    
+    if (userRole !== "leader" && userRole !== "admin") {
+        throw new HttpsError("permission-denied", "Only leaders can sync calendar events");
+    }
+    
+    const { eventId, token } = data;
+    
+    if (!eventId) {
+        throw new HttpsError("invalid-argument", "Event ID is required");
+    }
+    
+    if (!token) {
+        throw new HttpsError("invalid-argument", "OAuth token is required");
+    }
+    
+    try {
+        // Get event data
+        const eventDoc = await db.collection("events").doc(eventId).get();
+        if (!eventDoc.exists) {
+            throw new HttpsError("not-found", "Event not found");
+        }
+        
+        const eventData = eventDoc.data();
+        
+        if (!eventData.googleCalendarEventId) {
+            throw new HttpsError("failed-precondition", "No calendar event associated with this event");
+        }
+        
+        // Get attendee emails from event
+        const eventAttendees = eventData.attendees || [];
+        
+        // Get task assignees and merge with event attendees
+        const tasksSnapshot = await db.collection("tasks")
+            .where("eventId", "==", eventId)
+            .get();
+        
+        const taskAssignees = [];
+        tasksSnapshot.forEach(doc => {
+            const task = doc.data();
+            if (task.assignedTo && !taskAssignees.includes(task.assignedTo)) {
+                taskAssignees.push(task.assignedTo);
+            }
+        });
+        
+        // Merge and deduplicate attendees
+        const allAttendees = [...new Set([...eventAttendees, ...taskAssignees])];
+        
+        // Get all attendee emails
+        const attendeeEmails = await email.getAttendeeEmails(allAttendees);
+        
+        // Update calendar event with user's auth
+        const result = await calendarUserAuth.updateCalendarEventWithUserAuth(
+            token,
+            eventData.googleCalendarEventId,
+            eventData,
+            attendeeEmails
+        );
+        
+        if (result.success) {
+            return {
+                success: true,
+                calendarLink: result.calendarLink
+            };
+        } else {
+            if (result.requiresReauth) {
+                throw new HttpsError("unauthenticated", result.error);
+            }
+            throw new HttpsError("internal", result.error || "Failed to sync calendar event");
+        }
+        
+    } catch (error) {
+        console.error("Error syncing calendar event with user auth:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", error.message);
+    }
 });
