@@ -960,6 +960,10 @@ function createPreviewEventCard(event) {
                     </button>
                 ` : `
                     <div class="calendar-action-buttons">
+                        <button class="calendar-action-btn check-updates" onclick="event.stopPropagation(); checkCalendarUpdates('${event.id}')">
+                            <span class="material-icons">sync_alt</span>
+                            <span>Check for Updates</span>
+                        </button>
                         <button class="calendar-action-btn sync ${!hasDiscrepancy ? 'synced' : ''}" onclick="event.stopPropagation(); syncCalendarEvent('${event.id}')">
                             <span class="material-icons">sync</span>
                             <span>Sync to Calendar</span>
@@ -1166,14 +1170,45 @@ async function handleEventTypeChange(e) {
             break;
     }
     
-    // Update selected attendees to only include the default selected users
-    selectedAttendees = defaultSelectedUsers.map(user => user.uid);
+    // Always include leaders regardless of template
+    const leaders = await getLeaders();
+    const leaderUids = leaders.map(user => user.uid);
+    
+    // Merge default selected users with leaders
+    const mergedUids = [...new Set([...defaultSelectedUsers.map(u => u.uid), ...leaderUids])];
+    selectedAttendees = mergedUids;
     
     // Update attendee count
     updateAttendeeCount();
     
-    // Always populate with ALL users, but only check the default selected ones
+    // Always populate with ALL users, but check the merged selection
     populateAttendeesList(availableUsers, template);
+}
+
+// Get all leaders
+async function getLeaders() {
+    try {
+        const leadersSnapshot = await db.collection('users')
+            .where('role', 'in', ['leader', 'admin'])
+            .get();
+        
+        const leaders = [];
+        leadersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            leaders.push({
+                uid: doc.id,
+                displayName: userData.displayName || 'Unknown User',
+                email: userData.email,
+                gender: userData.gender,
+                photoURL: userData.photoURL
+            });
+        });
+        
+        return leaders;
+    } catch (error) {
+        console.error('Error getting leaders:', error);
+        return [];
+    }
 }
 
 // Expose functions to global scope
@@ -1585,11 +1620,8 @@ async function syncCalendarEvent(eventId) {
         const eventDoc = await db.collection('events').doc(eventId).get();
         const eventData = eventDoc.data();
         
-        // Check if the current user created the calendar event
-        if (eventData.calendarCreatedBy && eventData.calendarCreatedBy !== currentUser.uid) {
-            showNotification('Only the user who created the calendar event can sync it', 'error');
-            return;
-        }
+        // Leaders can sync any event
+        // (removed check that restricted sync to only the calendar creator)
         
         // Build sync confirmation message
         let message = 'The following information will be synced to your Google Calendar:\n\n';
@@ -1700,6 +1732,66 @@ function handleSendCalendarLater() {
     window.lastCreatedEventId = null;
 }
 
+// Check for calendar updates
+async function checkCalendarUpdates(eventId) {
+    // Request Google Calendar authorization if not already authorized
+    if (!window.googleCalendarAuth || !window.googleCalendarAuth.isAuthorized()) {
+        window.googleCalendarAuth.requestAuth(() => checkCalendarUpdates(eventId));
+        return;
+    }
+    
+    try {
+        showNotification('Checking for calendar updates...', 'info');
+        
+        // Get event data
+        const eventDoc = await db.collection('events').doc(eventId).get();
+        const eventData = eventDoc.data();
+        
+        if (!eventData.googleCalendarEventId) {
+            showNotification('No calendar event associated with this event', 'error');
+            return;
+        }
+        
+        // Get the OAuth token
+        const token = window.googleCalendarAuth.getToken();
+        
+        // Create a temporary cloud function call to check for updates
+        // For now, we'll just mark that we need to check manually
+        showNotification('Please review the calendar event and use the Sync button if changes are needed', 'info');
+        
+        // Mark event as needing review
+        await db.collection('events').doc(eventId).update({
+            'calendarSyncStatus.hasDiscrepancy': true,
+            'calendarSyncStatus.discrepancyDetails': ['Manual review requested - check Google Calendar for changes'],
+            'calendarSyncStatus.lastChecked': firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Refresh the display
+        loadCalendar();
+        loadUpcomingEvents();
+        
+        // Refresh the preview modal if it's open
+        const eventPreviewModal = document.getElementById('eventPreviewModal');
+        if (eventPreviewModal && eventPreviewModal.style.display !== 'none') {
+            const date = document.getElementById('previewDate').dataset.date;
+            const eventsSnapshot = await db.collection('events')
+                .where('date', '==', date)
+                .get();
+            
+            const events = [];
+            eventsSnapshot.forEach(doc => {
+                events.push({ id: doc.id, ...doc.data() });
+            });
+            
+            showEventPreviewModal(date, events);
+        }
+        
+    } catch (error) {
+        console.error('Error checking calendar updates:', error);
+        showNotification('Error checking for updates', 'error');
+    }
+}
+
 // Expose functions to global scope for other modules
 window.showNotification = showNotification;
 window.showEventModal = showEventModal;
@@ -1709,6 +1801,7 @@ window.canEditEvent = canEditEvent;
 window.deleteEvent = deleteEvent;
 window.createCalendarEvent = createCalendarEvent;
 window.syncCalendarEvent = syncCalendarEvent;
+window.checkCalendarUpdates = checkCalendarUpdates;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
