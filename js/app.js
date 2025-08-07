@@ -14,6 +14,7 @@ const firebaseConfig = {
 let auth, db, currentUser;
 let availableUsers = []; // Store list of users for task assignment
 let selectedAttendees = []; // Store selected attendees for the event
+let locationAutocomplete = null; // Store location autocomplete instance
 
 // Loading state management
 let loadingStates = {
@@ -432,6 +433,20 @@ function showEventModal(date = null, eventData = null) {
         modal.style.display = 'flex';
         setTimeout(() => {
             modal.classList.add('show');
+            
+            // Initialize location autocomplete
+            const locationInput = document.getElementById('eventLocation');
+            if (locationInput && window.LocationAutocomplete) {
+                if (locationAutocomplete) {
+                    locationAutocomplete.clear();
+                }
+                locationAutocomplete = new window.LocationAutocomplete(locationInput);
+                
+                // If editing, set the existing location value
+                if (eventData && eventData.location) {
+                    locationAutocomplete.setValue(eventData.location);
+                }
+            }
         }, 10);
     }
 }

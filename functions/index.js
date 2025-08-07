@@ -5,6 +5,7 @@ const { onDocumentDeleted, onDocumentCreated, onDocumentUpdated } = require("fir
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const sgMail = require("@sendgrid/mail");
+const { Client } = require("@googlemaps/google-maps-services-js");
 // Legacy calendar module removed - using user OAuth only
 const calendarUserAuth = require("./src/calendar-user-auth");
 const email = require("./src/email");
@@ -85,6 +86,156 @@ exports.checkUserAuthorization = onCall({
     } catch (error) {
         console.error("Error checking user authorization:", error);
         throw new HttpsError("internal", "Failed to check authorization");
+    }
+});
+
+// Get place suggestions for autocomplete
+exports.getPlaceSuggestions = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const context = request;
+    
+    // Check authentication
+    if (!context.auth) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+    
+    const { query } = request.data;
+    
+    if (!query || query.trim().length < 2) {
+        throw new HttpsError("invalid-argument", "Query must be at least 2 characters");
+    }
+    
+    try {
+        // Initialize Google Maps client
+        const googleMapsClient = new Client({});
+        
+        // Get the API key from environment variable
+        // Set this in .env file or Firebase Secret Manager
+        const mapsApiKey = process.env.GOOGLE_MAPS_KEY;
+        
+        if (!mapsApiKey) {
+            console.error("Google Maps API key not configured");
+            throw new HttpsError("failed-precondition", "Maps API not configured");
+        }
+        
+        // Perform place autocomplete search
+        const response = await googleMapsClient.placeAutocomplete({
+            params: {
+                input: query,
+                key: mapsApiKey,
+                // Bias results to Rockville, MD area
+                location: { lat: 39.0840, lng: -77.1528 },
+                radius: 50000, // 50km radius
+                components: ["country:us"]
+                // types parameter removed to allow all types
+            }
+        });
+        
+        if (response.data.status !== "OK" && response.data.status !== "ZERO_RESULTS") {
+            console.error("Places API error:", response.data.status);
+            throw new HttpsError("internal", "Failed to fetch suggestions");
+        }
+        
+        // Transform the results to a simpler format
+        const suggestions = (response.data.predictions || []).map(prediction => ({
+            placeId: prediction.place_id,
+            description: prediction.description,
+            mainText: prediction.structured_formatting?.main_text || prediction.description,
+            secondaryText: prediction.structured_formatting?.secondary_text || "",
+            terms: prediction.terms || []
+        }));
+        
+        return {
+            success: true,
+            suggestions: suggestions.slice(0, 8) // Return max 8 suggestions
+        };
+        
+    } catch (error) {
+        console.error("Error in getPlaceSuggestions:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", "Failed to get place suggestions");
+    }
+});
+
+// Get place details
+exports.getPlaceDetails = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const context = request;
+    
+    // Check authentication
+    if (!context.auth) {
+        throw new HttpsError("unauthenticated", "User must be authenticated");
+    }
+    
+    const { placeId } = request.data;
+    
+    if (!placeId) {
+        throw new HttpsError("invalid-argument", "Place ID is required");
+    }
+    
+    try {
+        // Initialize Google Maps client
+        const googleMapsClient = new Client({});
+        
+        // Get the API key from environment variable
+        const mapsApiKey = process.env.GOOGLE_MAPS_KEY;
+        
+        if (!mapsApiKey) {
+            console.error("Google Maps API key not configured");
+            throw new HttpsError("failed-precondition", "Maps API not configured");
+        }
+        
+        // Get place details
+        const response = await googleMapsClient.placeDetails({
+            params: {
+                place_id: placeId,
+                key: mapsApiKey,
+                fields: ["name", "formatted_address", "geometry", "place_id", "url"]
+            }
+        });
+        
+        if (response.data.status !== "OK") {
+            console.error("Place Details API error:", response.data.status);
+            throw new HttpsError("internal", "Failed to fetch place details");
+        }
+        
+        const place = response.data.result;
+        
+        return {
+            success: true,
+            place: {
+                placeId: place.place_id,
+                name: place.name,
+                address: place.formatted_address,
+                location: place.geometry?.location,
+                url: place.url // Google Maps URL
+            }
+        };
+        
+    } catch (error) {
+        console.error("Error in getPlaceDetails:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", "Failed to get place details");
     }
 });
 
