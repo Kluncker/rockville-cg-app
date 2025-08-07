@@ -1,0 +1,18 @@
+{
+  "name": "Rockville CG Hub",
+  "short_name": "Rockville CG",
+  "description": "See you in the neighborhood",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2196f3",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/images/mosaic-logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

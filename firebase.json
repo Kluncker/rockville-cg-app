@@ -1,13 +1,31 @@
 {
   "hosting": {
+    "site": "rockville-cg-planning",
     "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
-      "functions/**"
+      "functions/**",
+      "dist/**",
+      "scripts/**",
+      "vite.config.js",
+      "package.json",
+      "package-lock.json"
     ],
     "rewrites": [
+      {
+        "source": "/__/firebase/functions/**",
+        "function": "checkUserAuthorization"
+      },
+      {
+        "source": "/api/task/confirm",
+        "destination": "/task-action.html"
+      },
+      {
+        "source": "/api/task/decline",
+        "destination": "/task-action.html"
+      },
       {
         "source": "**",
         "destination": "/index.html"

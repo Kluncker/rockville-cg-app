@@ -5,6 +5,15 @@ functions/node_modules/
 # Firebase
 .firebase/
 *.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log
+
+# Firebase Emulator
+emulator-data/
+firebase-export-*/
 
 # Environment variables
 .env
@@ -28,3 +37,13 @@ build/
 # Temporary files
 *.tmp
 *.temp
+*.private.json
+
+# User data
+scripts/allowedUsers.json
+scripts/update_user_gender.py
+scripts/test_sendgrid.js
+functions/src/key.json
+scripts/update_user_families.py
+scripts/prepopulate_all_users.py
+scripts/delete_test_user.py
