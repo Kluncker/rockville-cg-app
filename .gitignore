@@ -47,3 +47,7 @@ functions/src/key.json
 scripts/update_user_families.py
 scripts/prepopulate_all_users.py
 scripts/delete_test_user.py
+scripts/prepopulate_events.py
+scripts/delete_events.py
+scripts/add_gender_hangouts.py
+scripts/remove_duplicate_events.py
