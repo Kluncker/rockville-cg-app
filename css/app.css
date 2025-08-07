@@ -656,6 +656,14 @@ section::before {
     margin-bottom: 0.5rem;
     font-weight: 500;
     color: var(--text-primary);
+    /* Override Material CSS label styles */
+    background-color: transparent !important;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    z-index: auto !important;
+    padding: 0 !important;
+    font-size: 0.9rem !important;
 }
 
 .form-group input,
@@ -1084,12 +1092,22 @@ section::before {
     background: var(--content-bg);
     border-radius: 12px;
     border: 1px solid var(--border-light);
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .attendee-count {
     font-size: 0.9rem;
     color: var(--text-secondary);
     font-weight: 500;
+    flex-shrink: 0;
+}
+
+.attendee-preview .secondary-button {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .attendees-list {
@@ -1546,5 +1564,22 @@ body.loading .main-content {
     
     .upcoming-events-list {
         grid-template-columns: 1fr;
+    }
+    
+    /* Fix form group labels on mobile */
+    .form-group label {
+        font-size: 0.85rem !important;
+    }
+    
+    /* Attendee preview on mobile */
+    .attendee-preview {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .attendee-preview .secondary-button {
+        width: 100%;
+        justify-content: center;
     }
 }

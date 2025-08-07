@@ -243,6 +243,32 @@ exports.onTaskUpdated = onDocumentUpdated({
             }
         }
         
+        // Check if task was just declined
+        if (taskBefore.status !== "declined" && taskAfter.status === "declined") {
+            // Get event data
+            const eventDoc = await db.collection("events").doc(taskAfter.eventId).get();
+            if (!eventDoc.exists) {
+                console.error("Event not found for task:", taskAfter.eventId);
+                return null;
+            }
+            
+            const event = eventDoc.data();
+            
+            // Get recipients for decline notification (leaders + event creator)
+            const leaderEmails = await email.getLeaderEmails();
+            const creatorEmail = await email.getEventCreatorEmail(event.createdBy);
+            const notificationRecipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
+            
+            // Get declining user info
+            const decliningUserDoc = await db.collection("users").doc(taskAfter.declinedBy).get();
+            const decliningUser = decliningUserDoc.exists ? decliningUserDoc.data() : { displayName: "User", email: "Unknown" };
+            
+            // Send decline notification email
+            await sendTaskDeclinedEmail({ ...taskAfter, id: taskId }, event, decliningUser, notificationRecipients);
+            
+            console.log(`Task decline notification sent for task: ${taskAfter.title}`);
+        }
+        
         // Check if assignee changed
         if (taskBefore.assignedTo !== taskAfter.assignedTo && taskAfter.assignedTo) {
             // Get new assignee email
@@ -866,7 +892,7 @@ exports.createCalendarEventWithUserAuth = onCall({
             const emailRecipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
             
             // Send confirmation emails only to leaders and creator
-            await email.sendEventCreatedEmail(eventData, emailRecipients);
+            await email.sendEventCreatedEmail({ ...eventData, id: eventId }, emailRecipients);
             
             return {
                 success: true,

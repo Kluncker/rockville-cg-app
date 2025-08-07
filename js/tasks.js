@@ -75,10 +75,16 @@ function createTaskCard(task) {
         <div class="task-status">
             <span class="status-badge ${task.status || 'pending'}">${formatStatus(task.status)}</span>
             ${task.status === 'pending' ? `
-                <button class="confirm-task-btn" onclick="confirmTask('${task.id}')">
-                    <span class="material-icons">check_circle</span>
-                    Confirm
-                </button>
+                <div class="task-actions">
+                    <button class="confirm-task-btn" onclick="confirmTask('${task.id}')">
+                        <span class="material-icons">check_circle</span>
+                        Confirm
+                    </button>
+                    <button class="decline-task-btn" onclick="declineTask('${task.id}')">
+                        <span class="material-icons">cancel</span>
+                        Decline
+                    </button>
+                </div>
             ` : ''}
         </div>
     `;
@@ -96,7 +102,8 @@ function formatStatus(status) {
     const statusLabels = {
         'pending': 'Pending',
         'confirmed': 'Confirmed',
-        'completed': 'Completed'
+        'completed': 'Completed',
+        'declined': 'Declined'
     };
     return statusLabels[status] || status;
 }
@@ -129,6 +136,37 @@ async function confirmTask(taskId) {
     } catch (error) {
         console.error('Error confirming task:', error);
         showNotification('Error confirming task', 'error');
+    }
+}
+
+// Decline task
+async function declineTask(taskId) {
+    if (!confirm('Are you sure you want to decline this task? This will notify the event coordinators.')) return;
+    
+    // Get current references
+    db = window.db || null;
+    currentUser = window.currentUser || null;
+    
+    if (!db || !currentUser) {
+        showNotification('Database not initialized', 'error');
+        return;
+    }
+    
+    try {
+        await db.collection('tasks').doc(taskId).update({
+            status: 'declined',
+            declinedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            declinedBy: currentUser.uid
+        });
+        
+        showNotification('Task declined. The coordinators will be notified.', 'info');
+        loadUserTasks(); // Reload tasks
+        
+        // Email notification is now handled automatically by Cloud Function trigger
+        
+    } catch (error) {
+        console.error('Error declining task:', error);
+        showNotification('Error declining task', 'error');
     }
 }
 
@@ -183,6 +221,41 @@ taskStyles.textContent = `
     .status-badge.completed {
         background: #E8F5E9;
         color: #2E7D32;
+    }
+    
+    .status-badge.declined {
+        background: #FFEBEE;
+        color: #C62828;
+    }
+    
+    .task-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .decline-task-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #FF5252, #F44336);
+        color: white;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .decline-task-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 82, 82, 0.3);
+    }
+    
+    .decline-task-btn .material-icons {
+        font-size: 1.25rem;
     }
     
     /* Task reminder notification */
@@ -307,6 +380,7 @@ function dismissReminder(button) {
 // Expose functions to global scope
 window.loadUserTasks = loadUserTasks;
 window.confirmTask = confirmTask;
+window.declineTask = declineTask;
 window.confirmTaskFromReminder = confirmTaskFromReminder;
 window.dismissReminder = dismissReminder;
 

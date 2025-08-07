@@ -19,6 +19,14 @@
         "function": "checkUserAuthorization"
       },
       {
+        "source": "/api/task/confirm",
+        "destination": "/task-action.html"
+      },
+      {
+        "source": "/api/task/decline",
+        "destination": "/task-action.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
