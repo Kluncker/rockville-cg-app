@@ -13,15 +13,37 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // Helper function to check if user is leader
+    function isLeader() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'leader';
+    }
+    
+    // Helper function to check if user is admin or leader
+    function isAdminOrLeader() {
+      return isAdmin() || isLeader();
+    }
+    
     // Helper function to check if user owns the document
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
+    // Helper function to check if users are in the same family
+    function isFamilyMember(userId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == 
+        get(/databases/$(database)/documents/users/$(userId)).data.familyId;
+    }
+    
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdminOrLeader();
     }
     
     // Events collection
@@ -29,9 +51,11 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isAuthenticated() && 
-        (resource.data.createdBy == request.auth.uid || isAdmin());
+        (resource.data.createdBy == request.auth.uid || isAdminOrLeader());
       allow delete: if isAuthenticated() && 
-        (resource.data.createdBy == request.auth.uid || isAdmin());
+        (('createdBy' in resource.data && resource.data.createdBy == request.auth.uid) || 
+         isAdminOrLeader() || 
+         (!('createdBy' in resource.data) && isAdminOrLeader())); // Allow leaders to delete old events without createdBy
     }
     
     // Tasks collection
@@ -41,8 +65,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
         (resource.data.assignedTo == request.auth.uid || 
          resource.data.createdBy == request.auth.uid || 
-         isAdmin());
-      allow delete: if isAdmin();
+         isFamilyMember(resource.data.assignedTo) ||
+         isAdminOrLeader());
+      allow delete: if isAdminOrLeader();
     }
     
     // Reminders collection
@@ -50,10 +75,10 @@ service cloud.firestore {
       allow read: if isAuthenticated() && 
         (resource.data.sentBy == request.auth.uid || 
          resource.data.sentTo == request.auth.uid || 
-         isAdmin());
+         isAdminOrLeader());
       allow create: if isAuthenticated();
       allow update: if false; // Reminders should not be updated
-      allow delete: if isAdmin();
+      allow delete: if isAdminOrLeader();
     }
   }
 }

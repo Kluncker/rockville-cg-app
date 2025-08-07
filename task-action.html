@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Action - Rockville CG Planning</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0b57d0;
+            --text-primary: #2C3E50;
+            --text-secondary: #64748B;
+            --border-light: rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+            --success-color: #4CAF50;
+            --error-color: #FF5252;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #E3F2FD 0%, #F3E5F5 50%, #FFF3E0 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .action-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            animation: fadeInScale 0.5s ease;
+        }
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 2rem;
+            display: block;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-message {
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .status-message.success {
+            background: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .status-message.error {
+            background: rgba(255, 82, 82, 0.1);
+            color: var(--error-color);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), #5B21B6);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(11, 87, 208, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--text-primary);
+            border: 1px solid var(--border-light);
+        }
+
+        .btn-secondary:hover {
+            background: #f5f5f5;
+        }
+
+        .material-icons {
+            font-size: 20px;
+        }
+
+        .auth-section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-light);
+        }
+
+        .auth-message {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .google-signin-btn {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .google-signin-btn:hover {
+            background: #f5f5f5;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .google-logo {
+            width: 20px;
+            height: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="action-container">
+        <img src="/images/mosaic-logo-512.png" alt="Mosaic Logo" class="logo">
+        
+        <div id="loading-state" class="loading">
+            <h1>Processing Your Request</h1>
+            <div class="spinner"></div>
+            <p class="subtitle">Please wait while we process your task action...</p>
+        </div>
+
+        <div id="success-state" class="hidden">
+            <h1>Success!</h1>
+            <div class="status-message success">
+                <p id="success-message"></p>
+            </div>
+            <div class="action-buttons">
+                <a href="/dashboard.html" class="btn btn-primary">
+                    <span class="material-icons">dashboard</span>
+                    Go to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <div id="error-state" class="hidden">
+            <h1>Oops!</h1>
+            <div class="status-message error">
+                <p id="error-message"></p>
+            </div>
+            <div class="action-buttons">
+                <a href="/dashboard.html" class="btn btn-secondary">
+                    <span class="material-icons">home</span>
+                    Go to Dashboard
+                </a>
+                <button onclick="location.reload()" class="btn btn-primary">
+                    <span class="material-icons">refresh</span>
+                    Try Again
+                </button>
+            </div>
+        </div>
+
+        <div id="auth-state" class="hidden">
+            <h1>Sign In Required</h1>
+            <p class="subtitle">Please sign in to continue with this action</p>
+            
+            <div class="auth-section">
+                <p class="auth-message">
+                    Sign in with your Google account to access the Rockville CG Planning app.
+                </p>
+                <button id="google-signin-btn" class="google-signin-btn">
+                    <svg class="google-logo" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Sign in with Google
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+    
+    <!-- Load configs -->
+    <script src="/js/firebase-config.js"></script>
+    <script src="/js/config.js"></script>
+    
+    <script>
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        
+        const auth = firebase.auth();
+        const functions = firebase.functions();
+
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const action = window.location.pathname.includes('confirm') ? 'confirm' : 'decline';
+
+        // State management
+        function showState(stateId) {
+            ['loading-state', 'success-state', 'error-state', 'auth-state'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(stateId).classList.remove('hidden');
+        }
+
+        // Process task action
+        async function processTaskAction() {
+            if (!token) {
+                showError('Invalid request: No token provided');
+                return;
+            }
+
+            try {
+                // Call the appropriate cloud function
+                const functionName = action === 'confirm' ? 'confirmTaskByToken' : 'declineTaskByToken';
+                const result = await functions.httpsCallable(functionName)({ token });
+                
+                if (result.data.success) {
+                    const message = action === 'confirm' 
+                        ? `Task "${result.data.taskTitle}" has been confirmed successfully!` 
+                        : `Task "${result.data.taskTitle}" has been declined.`;
+                    
+                    showSuccess(message);
+                    
+                    // Redirect to dashboard after 3 seconds
+                    setTimeout(() => {
+                        window.location.href = '/dashboard.html';
+                    }, 3000);
+                } else {
+                    showError(result.data.message || 'An error occurred processing your request');
+                }
+            } catch (error) {
+                console.error('Error processing task action:', error);
+                
+                if (error.code === 'unauthenticated') {
+                    // Show auth state
+                    showState('auth-state');
+                } else if (error.code === 'not-found') {
+                    showError('Invalid or expired token. This link may have already been used.');
+                } else if (error.code === 'failed-precondition') {
+                    showError(error.message || 'This action cannot be completed.');
+                } else {
+                    showError('An error occurred processing your request. Please try again.');
+                }
+            }
+        }
+
+        function showSuccess(message) {
+            document.getElementById('success-message').textContent = message;
+            showState('success-state');
+        }
+
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            showState('error-state');
+        }
+
+        // Google Sign In
+        document.getElementById('google-signin-btn').addEventListener('click', async () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.setCustomParameters({
+                prompt: 'select_account'
+            });
+            
+            try {
+                const result = await auth.signInWithPopup(provider);
+                // After sign in, try the action again
+                showState('loading-state');
+                await processTaskAction();
+            } catch (error) {
+                console.error('Sign in error:', error);
+                showError('Failed to sign in. Please try again.');
+            }
+        });
+
+        // Check auth state and process action
+        auth.onAuthStateChanged(async (user) => {
+            if (user || !token) {
+                // If user is signed in or there's no token, process immediately
+                await processTaskAction();
+            } else {
+                // If not signed in and we have a token, try to process anyway
+                // (the cloud function doesn't require auth for token actions)
+                await processTaskAction();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -98,12 +98,54 @@ function initializeFirebase() {
         db = firebase.firestore();
         
         // Check if user is already signed in
-        auth.onAuthStateChanged((user) => {
+        auth.onAuthStateChanged(async (user) => {
             if (user) {
-                // User is signed in, redirect to dashboard
-                transitionToDashboard();
+                console.log('🔐 User already signed in:', user.email);
+                // Check if user is allowed before redirecting
+                const isAllowed = await isEmailAllowed(user.email);
+                if (isAllowed) {
+                    // User is signed in and allowed, redirect to dashboard
+                    transitionToDashboard();
+                } else {
+                    // User is signed in but not allowed
+                    console.error('⛔ Already signed-in user not authorized!');
+                    await auth.signOut();
+                    showNotification('Access denied. You are not authorized to use this app.', 'error');
+                }
             }
         });
+    }
+}
+
+// Check if email is allowed using Cloud Function
+async function isEmailAllowed(email) {
+    try {
+        console.log('🔍 Checking if email is allowed:', email);
+        
+        // Call the Cloud Function (use production, not emulator)
+        const functionsInstance = window.getFirebaseFunctions ? 
+            window.getFirebaseFunctions('checkUserAuthorization') : 
+            firebase.functions();
+        const checkUserAuthorization = functionsInstance.httpsCallable('checkUserAuthorization');
+        const result = await checkUserAuthorization();
+        
+        console.log('📡 Authorization check result:', result.data);
+        
+        if (result.data.authorized) {
+            console.log('✅ User authorized:', result.data.message);
+            return true;
+        } else {
+            console.log('❌ User not authorized:', result.data.message);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Error checking authorization:', error);
+        console.error('Error details:', {
+            code: error.code,
+            message: error.message,
+            details: error.details
+        });
+        return false;
     }
 }
 
@@ -114,13 +156,34 @@ async function signInWithGoogle() {
         const result = await auth.signInWithPopup(provider);
         const user = result.user;
         
-        // Save user to Firestore
-        await db.collection('users').doc(user.uid).set({
-            displayName: user.displayName,
-            email: user.email,
-            photoURL: user.photoURL,
-            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        // Check if user is allowed
+        const isAllowed = await isEmailAllowed(user.email);
+        if (!isAllowed) {
+            // Sign out the user immediately
+            await auth.signOut();
+            showNotification('Access denied. You are not authorized to use this app. Please contact an administrator.', 'error');
+            return;
+        }
+        
+        // Check if user document exists
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        
+        if (!userDoc.exists) {
+            // Create new user document
+            await db.collection('users').doc(user.uid).set({
+                displayName: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL,
+                role: 'member', // Default role for new users
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } else {
+            // Update lastLogin for existing user
+            await db.collection('users').doc(user.uid).update({
+                lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
         
         // Transition to dashboard
         transitionToDashboard();

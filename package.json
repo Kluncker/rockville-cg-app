@@ -1,13 +1,20 @@
 {
-  "name": "wz-rockville-cg-app",
+  "name": "rockville-cg-app",
   "version": "1.0.0",
-  "description": "Rockville CG App with Vite development server",
+  "description": "",
+  "main": "index.js",
   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "emulators": "firebase emulators:start --only functions",
+    "emulators:ui": "open http://localhost:4000",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
-    "vite": "^5.0.12"
+    "vite": "^5.4.11"
   }
 }
