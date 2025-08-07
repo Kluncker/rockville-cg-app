@@ -33,7 +33,7 @@ async function testPlacesAPI() {
     const googleMapsClient = new Client({});
     
     // You'll need to set this to test locally
-    const MAPS_API_KEY = process.env.GOOGLE_MAPS_KEY || 'AIzaSyCye3kY42jWrlD4fBO-hQ0j2LyNffRKJ20';
+    const MAPS_API_KEY = process.env.GOOGLE_MAPS_KEY;
     
     if (!MAPS_API_KEY || MAPS_API_KEY === 'YOUR_API_KEY') {
         console.error(`${colors.red}Error: Google Maps API key not set!${colors.reset}`);
