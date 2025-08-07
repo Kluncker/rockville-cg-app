@@ -4,6 +4,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentDeleted, onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const sgMail = require("@sendgrid/mail");
 // Legacy calendar module removed - using user OAuth only
 const calendarUserAuth = require("./src/calendar-user-auth");
 const email = require("./src/email");
@@ -153,12 +154,16 @@ exports.onTaskCreated = onDocumentCreated({
         // Get CC recipients (leaders + event creator)
         const ccRecipients = await email.getTaskEmailCCRecipients(event.createdBy);
         
-        // Send task assigned email
+        // Generate action tokens for this task
+        const tokens = await generateTaskActionTokens(taskId, task.assignedTo, assigneeEmail);
+        
+        // Send task assigned email with tokens
         const result = await email.sendTaskAssignedEmail(
             { ...task, id: taskId },
             event,
             assigneeEmail,
-            ccRecipients
+            ccRecipients,
+            tokens
         );
         
         if (result.success) {
@@ -479,6 +484,288 @@ exports.deleteCalendarEventWithUserAuth = onCall({
         throw new HttpsError("internal", error.message);
     }
 });
+
+// Confirm task by token (no auth required)
+exports.confirmTaskByToken = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const { token } = request.data;
+    
+    if (!token) {
+        throw new HttpsError("invalid-argument", "Token is required");
+    }
+    
+    try {
+        // Look up token in database
+        const tokenSnapshot = await db.collection("taskTokens")
+            .where("token", "==", token)
+            .where("used", "==", false)
+            .limit(1)
+            .get();
+        
+        if (tokenSnapshot.empty) {
+            throw new HttpsError("not-found", "Invalid or expired token");
+        }
+        
+        const tokenDoc = tokenSnapshot.docs[0];
+        const tokenData = tokenDoc.data();
+        
+        // Check if token is expired (30 days)
+        const expirationDate = tokenData.expiresAt.toDate();
+        if (new Date() > expirationDate) {
+            throw new HttpsError("failed-precondition", "Token has expired");
+        }
+        
+        // Get task data
+        const taskDoc = await db.collection("tasks").doc(tokenData.taskId).get();
+        if (!taskDoc.exists) {
+            throw new HttpsError("not-found", "Task not found");
+        }
+        
+        const task = { id: taskDoc.id, ...taskDoc.data() };
+        
+        // Check if task is already confirmed
+        if (task.status === "confirmed") {
+            // Mark token as used anyway
+            await tokenDoc.ref.update({ used: true });
+            return { 
+                success: true, 
+                message: "Task was already confirmed",
+                alreadyConfirmed: true 
+            };
+        }
+        
+        // Get user data for the confirming user
+        const userDoc = await db.collection("users").doc(tokenData.userId).get();
+        const confirmingUser = userDoc.exists ? userDoc.data() : { email: tokenData.userEmail };
+        
+        // Update task status
+        await db.collection("tasks").doc(tokenData.taskId).update({
+            status: "confirmed",
+            confirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+            confirmedBy: tokenData.userId
+        });
+        
+        // Mark token as used (one-time use)
+        await tokenDoc.ref.update({ used: true });
+        
+        // Get event data for email
+        const eventDoc = await db.collection("events").doc(task.eventId).get();
+        if (eventDoc.exists) {
+            const event = eventDoc.data();
+            const assigneeEmail = tokenData.userEmail;
+            const ccRecipients = await email.getTaskEmailCCRecipients(event.createdBy);
+            
+            // Send confirmation email
+            await email.sendTaskConfirmedEmail(
+                task,
+                event,
+                assigneeEmail,
+                ccRecipients,
+                confirmingUser
+            );
+        }
+        
+        return { 
+            success: true, 
+            message: "Task confirmed successfully",
+            taskTitle: task.title
+        };
+        
+    } catch (error) {
+        console.error("Error confirming task by token:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", error.message);
+    }
+});
+
+// Decline task by token (no auth required)
+exports.declineTaskByToken = onCall({
+    region: "us-central1",
+    cors: [
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "https://wz-rockville-cg-app.web.app",
+        "https://wz-rockville-cg-app.firebaseapp.com",
+        "https://rockville-cg-planning.web.app"
+    ]
+}, async (request) => {
+    const { token } = request.data;
+    
+    if (!token) {
+        throw new HttpsError("invalid-argument", "Token is required");
+    }
+    
+    try {
+        // Look up token in database
+        const tokenSnapshot = await db.collection("taskTokens")
+            .where("token", "==", token)
+            .where("used", "==", false)
+            .limit(1)
+            .get();
+        
+        if (tokenSnapshot.empty) {
+            throw new HttpsError("not-found", "Invalid or expired token");
+        }
+        
+        const tokenDoc = tokenSnapshot.docs[0];
+        const tokenData = tokenDoc.data();
+        
+        // Check if token is expired (30 days)
+        const expirationDate = tokenData.expiresAt.toDate();
+        if (new Date() > expirationDate) {
+            throw new HttpsError("failed-precondition", "Token has expired");
+        }
+        
+        // Get task data
+        const taskDoc = await db.collection("tasks").doc(tokenData.taskId).get();
+        if (!taskDoc.exists) {
+            throw new HttpsError("not-found", "Task not found");
+        }
+        
+        const task = { id: taskDoc.id, ...taskDoc.data() };
+        
+        // Check if task is already confirmed
+        if (task.status === "confirmed") {
+            // Mark token as used anyway
+            await tokenDoc.ref.update({ used: true });
+            throw new HttpsError("failed-precondition", "Cannot decline a confirmed task");
+        }
+        
+        // Update task status to declined
+        await db.collection("tasks").doc(tokenData.taskId).update({
+            status: "declined",
+            declinedAt: admin.firestore.FieldValue.serverTimestamp(),
+            declinedBy: tokenData.userId
+        });
+        
+        // Mark token as used (one-time use)
+        await tokenDoc.ref.update({ used: true });
+        
+        // Get event data for notification
+        const eventDoc = await db.collection("events").doc(task.eventId).get();
+        if (eventDoc.exists) {
+            const event = eventDoc.data();
+            
+            // Get recipients for decline notification (leaders + event creator)
+            const leaderEmails = await email.getLeaderEmails();
+            const creatorEmail = await email.getEventCreatorEmail(event.createdBy);
+            const notificationRecipients = [...new Set([...leaderEmails, creatorEmail].filter(Boolean))];
+            
+            // Get declining user info
+            const userDoc = await db.collection("users").doc(tokenData.userId).get();
+            const decliningUser = userDoc.exists ? userDoc.data() : { displayName: "User", email: tokenData.userEmail };
+            
+            // Send decline notification email
+            await sendTaskDeclinedEmail(task, event, decliningUser, notificationRecipients);
+        }
+        
+        return { 
+            success: true, 
+            message: "Task declined successfully",
+            taskTitle: task.title
+        };
+        
+    } catch (error) {
+        console.error("Error declining task by token:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", error.message);
+    }
+});
+
+// Helper function to generate secure token
+function generateSecureToken() {
+    // Use Node.js crypto module for cryptographically secure random tokens
+    const crypto = require("crypto");
+    return crypto.randomBytes(32).toString("hex");
+}
+
+// Generate task action tokens when task is created
+async function generateTaskActionTokens(taskId, userId, userEmail) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days from now
+    
+    // Generate confirm token
+    const confirmToken = generateSecureToken();
+    await db.collection("taskTokens").add({
+        token: confirmToken,
+        taskId: taskId,
+        userId: userId,
+        userEmail: userEmail,
+        action: "confirm",
+        used: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt)
+    });
+    
+    // Generate decline token
+    const declineToken = generateSecureToken();
+    await db.collection("taskTokens").add({
+        token: declineToken,
+        taskId: taskId,
+        userId: userId,
+        userEmail: userEmail,
+        action: "decline",
+        used: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt)
+    });
+    
+    return { confirmToken, declineToken };
+}
+
+// Send task declined email (helper function)
+async function sendTaskDeclinedEmail(task, event, decliningUser, recipients) {
+    const msg = {
+        to: recipients,
+        from: {
+            email: "admin@mosaic-rockville-cg.com",
+            name: "Rockville CG App"
+        },
+        subject: `Task Declined: ${task.title}`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #ff5252;">Task Declined</h2>
+                <h3 style="color: #333;">${task.title}</h3>
+                
+                <div style="background: #ffebee; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ff5252;">
+                    <p><strong>Event:</strong> ${event.title}</p>
+                    <p><strong>Task:</strong> ${task.title}</p>
+                    <p><strong>Declined By:</strong> ${decliningUser.displayName || decliningUser.email}</p>
+                    <p><strong>Declined At:</strong> ${new Date().toLocaleString()}</p>
+                </div>
+                
+                <p style="color: #666;">This task needs to be reassigned to another member.</p>
+                
+                <div style="margin: 20px 0; text-align: center;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html#event-${event.id}" style="display: inline-block; padding: 12px 24px; background: #0b57d0; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Event & Reassign Task</a>
+                </div>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+                    <p>This is an automated message from Rockville CG App.</p>
+                </div>
+            </div>
+        `
+    };
+    
+    try {
+        await sgMail.sendMultiple(msg);
+        console.log("Task declined notification sent to:", recipients);
+    } catch (error) {
+        console.error("Error sending task declined email:", error);
+    }
+}
 
 // Legacy deleteCalendarEvent removed - use deleteCalendarEventWithUserAuth instead
 

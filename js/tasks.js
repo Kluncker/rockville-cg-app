@@ -55,6 +55,7 @@ function createTaskCard(task) {
     const card = document.createElement('div');
     card.className = 'task-card fade-in';
     card.dataset.status = task.status || 'pending';
+    card.dataset.taskId = task.id; // Add task ID for URL navigation
     
     // Format date
     const taskDate = new Date(task.eventDate);

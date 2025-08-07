@@ -16,7 +16,7 @@ sgMail.setApiKey(
 const emailTemplates = {
     discrepancyAlert: {
         subject: "Calendar Sync Issue - Action Required",
-        generateHtml: (eventTitle, discrepancies) => `
+        generateHtml: (eventId, eventTitle, discrepancies) => `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #ff5252;">Calendar Sync Issue Detected</h2>
                 <p>A discrepancy has been detected between the Firebase event and Google Calendar for:</p>
@@ -29,7 +29,13 @@ const emailTemplates = {
                     </ul>
                 </div>
                 
-                <p>Please log in to the Rockville CG app to sync the event with Google Calendar.</p>
+                <div style="margin: 20px 0; text-align: center;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html#event-${eventId}" style="display: inline-block; padding: 12px 24px; background: #ff9800; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Resolve Sync Issues</a>
+                </div>
+                
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Or copy and paste this link: https://rockville-cg-planning.web.app/dashboard.html#event-${eventId}
+                </p>
                 
                 <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
                     <p>This is an automated message from Rockville CG App.</p>
@@ -50,6 +56,10 @@ const emailTemplates = {
                     <p><strong>Time:</strong> ${event.time || "TBD"}</p>
                     <p><strong>Location:</strong> ${event.location || "TBD"}</p>
                     ${event.description ? `<p><strong>Description:</strong> ${event.description}</p>` : ""}
+                </div>
+                
+                <div style="margin: 20px 0; text-align: center;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html#event-${event.id}" style="display: inline-block; padding: 12px 24px; background: #0b57d0; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Event Details</a>
                 </div>
                 
                 <p>A calendar invitation has been sent to your email. Please check your calendar for more details.</p>
@@ -75,8 +85,8 @@ const emailTemplates = {
                     ${task.description ? `<p><strong>Description:</strong> ${task.description}</p>` : ""}
                 </div>
                 
-                <div style="margin: 20px 0;">
-                    <a href="https://rockville-cg-planning.web.app/dashboard.html" style="display: inline-block; padding: 12px 24px; background: #FF9800; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Task in Dashboard</a>
+                <div style="margin: 20px 0; text-align: center;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html#task-${task.id}" style="display: inline-block; padding: 12px 24px; background: #FF9800; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Task in Dashboard</a>
                 </div>
                 
                 <p style="color: #666;">Please confirm this task when you're ready to commit to completing it.</p>
@@ -109,7 +119,7 @@ const emailTemplates = {
                 
                 ${task.status !== "confirmed" ? `
                 <div style="margin: 20px 0;">
-                    <a href="https://rockville-cg-planning.web.app/dashboard.html" style="display: inline-block; padding: 12px 24px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Confirm Task Now</a>
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html#confirm-task-${task.id}" style="display: inline-block; padding: 12px 24px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Confirm Task Now</a>
                 </div>
                 <p style="color: #666;">Please confirm this task if you haven't already.</p>
                 ` : `
@@ -139,6 +149,10 @@ const emailTemplates = {
                     ${task.description ? `<p><strong>Description:</strong> ${task.description}</p>` : ""}
                 </div>
                 
+                <div style="margin: 20px 0; text-align: center;">
+                    <a href="https://rockville-cg-planning.web.app/dashboard.html#event-${event.id}" style="display: inline-block; padding: 12px 24px; background: #0b57d0; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Event Details</a>
+                </div>
+                
                 <p style="color: #666;">Thank you for confirming this task. The event organizers have been notified.</p>
                 
                 <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
@@ -160,7 +174,7 @@ async function sendDiscrepancyAlert(event, discrepancies, recipients) {
             name: "Rockville CG App"
         },
         subject: template.subject,
-        html: template.generateHtml(event.title, discrepancies)
+        html: template.generateHtml(event.id, event.title, discrepancies)
     };
     
     try {
@@ -255,12 +269,40 @@ async function getLeaderEmails() {
 }
 
 // Send task assigned email
-async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients) {
+async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, tokens = null) {
     const template = emailTemplates.taskAssigned;
     
     if (!assigneeEmail) {
         console.error("No assignee email provided for task assigned email");
         return { success: false, error: "No assignee email provided" };
+    }
+    
+    // Modify the template to include token-based buttons if tokens are provided
+    let htmlContent = template.generateHtml(task, event);
+    
+    if (tokens && tokens.confirmToken && tokens.declineToken) {
+        // Replace the dashboard link with direct action buttons
+        const confirmUrl = `https://rockville-cg-planning.web.app/api/task/confirm?token=${tokens.confirmToken}`;
+        const declineUrl = `https://rockville-cg-planning.web.app/api/task/decline?token=${tokens.declineToken}`;
+        
+        const actionButtons = `
+                <div style="margin: 20px 0; display: flex; gap: 12px; justify-content: center;">
+                    <a href="${confirmUrl}" style="display: inline-block; padding: 12px 24px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        ✓ Accept Task
+                    </a>
+                    <a href="${declineUrl}" style="display: inline-block; padding: 12px 24px; background: #ff5252; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        ✗ Decline Task
+                    </a>
+                </div>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Or <a href="https://rockville-cg-planning.web.app/dashboard.html#task-${task.id}">manage in dashboard</a>
+                </p>`;
+        
+        // Replace the existing button section
+        htmlContent = htmlContent.replace(
+            /<div style="margin: 20px 0; text-align: center;">[\s\S]*?<\/div>\s*<p style="color: #666;">Please confirm this task when you're ready to commit to completing it\.<\/p>/,
+            actionButtons
+        );
     }
     
     const msg = {
@@ -273,7 +315,7 @@ async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients) {
         subject: template.subject
             .replace("[TASK_TITLE]", task.title)
             .replace("[DUE_DATE]", new Date(task.eventDate).toLocaleDateString()),
-        html: template.generateHtml(task, event)
+        html: htmlContent
     };
     
     try {

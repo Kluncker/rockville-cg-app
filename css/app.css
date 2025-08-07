@@ -1374,24 +1374,63 @@ body.loading .main-content {
     }
 }
 
+/* URL Navigation Animations */
+.highlight-pulse {
+    animation: highlightPulse 1s ease-in-out 3;
+    box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+}
+
+@keyframes highlightPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 20px 10px rgba(33, 150, 243, 0.3);
+        transform: scale(1.02);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+        transform: scale(1);
+    }
+}
+
+.pulse-button {
+    animation: buttonPulse 1s ease-in-out 3;
+}
+
+@keyframes buttonPulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+    }
+    50% {
+        transform: scale(1.1);
+        box-shadow: 0 8px 24px rgba(76, 175, 80, 0.5);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+    }
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
-    .app-header {
-        padding: 0.5rem 0.75rem;
+    .content-wrapper {
+        padding: 1rem;
     }
     
-    .header-content {
-        flex-wrap: nowrap; /* Prevent wrapping */
-        gap: 0.5rem;
+    .calendar-nav h3 {
+        font-size: 1.2rem;
     }
     
-    .header-left, .header-right {
-        gap: 0.4rem;
+    .event-form .form-row {
+        flex-direction: column;
     }
     
-    /* Smaller app title on mobile */
-    .app-title {
-        font-size: 0.95rem;
+    .modal-content {
+        margin: 1rem;
+        max-height: calc(100vh - 2rem);
     }
     
     /* Smaller icon buttons on mobile */

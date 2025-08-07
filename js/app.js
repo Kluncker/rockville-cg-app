@@ -177,6 +177,9 @@ async function initializeApp() {
     
     // Hide loading overlay and show content
     hideLoadingOverlay();
+    
+    // Handle URL hash navigation after content is loaded
+    handleUrlHash();
 }
 
 // Hide loading overlay and show content
@@ -1802,6 +1805,113 @@ window.deleteEvent = deleteEvent;
 window.createCalendarEvent = createCalendarEvent;
 window.syncCalendarEvent = syncCalendarEvent;
 window.checkCalendarUpdates = checkCalendarUpdates;
+
+// Handle URL hash navigation
+async function handleUrlHash() {
+    const hash = window.location.hash;
+    if (!hash) return;
+    
+    // Parse hash format: #action-id
+    const match = hash.match(/^#(event|task|edit|confirm-task)-(.+)$/);
+    if (!match) return;
+    
+    const [, action, id] = match;
+    
+    // Give UI time to fully render
+    setTimeout(async () => {
+        try {
+            switch (action) {
+                case 'event':
+                case 'edit':
+                    // Load and open event in preview modal
+                    const eventDoc = await db.collection('events').doc(id).get();
+                    if (eventDoc.exists) {
+                        const eventData = { id: eventDoc.id, ...eventDoc.data() };
+                        
+                        // Get the date for the preview modal
+                        const date = eventData.date;
+                        
+                        // Load all events for that date
+                        const eventsSnapshot = await db.collection('events')
+                            .where('date', '==', date)
+                            .get();
+                        
+                        const events = [];
+                        eventsSnapshot.forEach(doc => {
+                            events.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        // Show the preview modal
+                        showEventPreviewModal(date, events);
+                        
+                        // If edit mode, also open the edit modal
+                        if (action === 'edit' && canEditEvent(eventData)) {
+                            setTimeout(() => {
+                                showEventModal(null, eventData);
+                            }, 500);
+                        }
+                    } else {
+                        showNotification('Event not found', 'error');
+                    }
+                    break;
+                    
+                case 'task':
+                case 'confirm-task':
+                    // Find and highlight task
+                    const taskElement = document.querySelector(`[data-task-id="${id}"]`);
+                    if (taskElement) {
+                        // Scroll to task
+                        taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // Add highlight animation
+                        taskElement.classList.add('highlight-pulse');
+                        
+                        // Remove highlight after animation
+                        setTimeout(() => {
+                            taskElement.classList.remove('highlight-pulse');
+                        }, 3000);
+                        
+                        // If confirm-task, highlight the confirm button
+                        if (action === 'confirm-task') {
+                            const confirmBtn = taskElement.querySelector('.confirm-task-btn');
+                            if (confirmBtn) {
+                                confirmBtn.classList.add('pulse-button');
+                                setTimeout(() => {
+                                    confirmBtn.classList.remove('pulse-button');
+                                }, 3000);
+                            }
+                        }
+                    } else {
+                        // Task might not be loaded yet, try loading it
+                        const taskDoc = await db.collection('tasks').doc(id).get();
+                        if (taskDoc.exists) {
+                            showNotification('Task found. Please check your tasks list.', 'info');
+                            // Reload tasks to ensure it's visible
+                            await loadTasks();
+                            
+                            // Try again after reload
+                            setTimeout(() => {
+                                const reloadedTaskElement = document.querySelector(`[data-task-id="${id}"]`);
+                                if (reloadedTaskElement) {
+                                    reloadedTaskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    reloadedTaskElement.classList.add('highlight-pulse');
+                                }
+                            }, 500);
+                        } else {
+                            showNotification('Task not found', 'error');
+                        }
+                    }
+                    break;
+            }
+            
+            // Clear the hash after handling
+            window.history.pushState(null, '', window.location.pathname);
+        } catch (error) {
+            console.error('Error handling URL hash:', error);
+            showNotification('Error navigating to content', 'error');
+        }
+    }, 500);
+}
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
