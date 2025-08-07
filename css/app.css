@@ -751,17 +751,22 @@ section::before {
 
 /* Notification Dropdown */
 .notification-dropdown {
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 10rem;
+    position: fixed;
     background: white;
     border-radius: 16px;
     box-shadow: var(--shadow-lg);
     min-width: 360px;
     max-width: 400px;
-    z-index: 200;
+    z-index: 1001; /* Higher than modals to ensure visibility */
     animation: fadeInScale 0.2s ease;
     border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 480px) {
+    .notification-dropdown {
+        min-width: 300px;
+        max-width: calc(100vw - 2rem);
+    }
 }
 
 .notification-header {

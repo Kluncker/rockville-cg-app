@@ -290,12 +290,17 @@ function setupEventListeners() {
     }
     
     // Close dropdowns when clicking outside
-    document.addEventListener('click', () => {
-        if (userDropdown) {
+    document.addEventListener('click', (e) => {
+        // Don't close if clicking inside the dropdowns
+        const clickedInsideUserDropdown = userDropdown && userDropdown.contains(e.target);
+        const clickedInsideNotificationDropdown = document.getElementById('notificationDropdown')?.contains(e.target);
+        
+        if (!clickedInsideUserDropdown && userDropdown) {
             userDropdown.style.display = 'none';
         }
+        
         const notificationDropdown = document.getElementById('notificationDropdown');
-        if (notificationDropdown) {
+        if (!clickedInsideNotificationDropdown && notificationDropdown) {
             notificationDropdown.style.display = 'none';
         }
     });
@@ -707,10 +712,8 @@ function toggleNotificationDropdown() {
         notificationDropdown.id = 'notificationDropdown';
         notificationDropdown.className = 'notification-dropdown';
         
-        // Position it relative to the notification button
-        const notificationBtn = document.getElementById('notificationBtn');
-        const headerContent = document.querySelector('.header-content');
-        headerContent.appendChild(notificationDropdown);
+        // Append to body for better positioning control
+        document.body.appendChild(notificationDropdown);
     }
     
     // Toggle visibility
@@ -719,6 +722,21 @@ function toggleNotificationDropdown() {
         const userDropdown = document.getElementById('userDropdown');
         if (userDropdown) {
             userDropdown.style.display = 'none';
+        }
+        
+        // Position the dropdown relative to the notification button
+        const notificationBtn = document.getElementById('notificationBtn');
+        const btnRect = notificationBtn.getBoundingClientRect();
+        
+        // Calculate position
+        notificationDropdown.style.position = 'fixed';
+        notificationDropdown.style.top = (btnRect.bottom + 8) + 'px';
+        notificationDropdown.style.right = (window.innerWidth - btnRect.right) + 'px';
+        
+        // Ensure dropdown doesn't go off-screen on mobile
+        const dropdownWidth = 360;
+        if (window.innerWidth - btnRect.left < dropdownWidth) {
+            notificationDropdown.style.right = '1rem';
         }
         
         // Show notification dropdown
