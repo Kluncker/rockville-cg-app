@@ -437,6 +437,13 @@ function showEventModal(date = null, eventData = null) {
             attendeeCount.textContent = '0 attendees selected';
         }
         
+        // Remove any existing event type change listeners
+        const eventTypeSelect = document.getElementById('eventType');
+        if (eventTypeSelect) {
+            const newEventTypeSelect = eventTypeSelect.cloneNode(true);
+            eventTypeSelect.parentNode.replaceChild(newEventTypeSelect, eventTypeSelect);
+        }
+        
         if (eventData) {
             // Edit mode - check permissions first
             if (!canEditEvent(eventData)) {
@@ -456,10 +463,10 @@ function showEventModal(date = null, eventData = null) {
             // Clear event ID to indicate new event
             delete form.dataset.eventId;
             
-            // Set up event type change listener for auto-selecting attendees
-            const eventTypeSelect = document.getElementById('eventType');
-            if (eventTypeSelect) {
-                eventTypeSelect.addEventListener('change', handleEventTypeChange);
+            // Set up event type change listener for auto-selecting attendees (only for new events)
+            const newEventTypeSelect = document.getElementById('eventType');
+            if (newEventTypeSelect) {
+                newEventTypeSelect.addEventListener('change', handleEventTypeChange);
                 // Also hide attendees list initially
                 document.getElementById('attendeesList').style.display = 'none';
             }
@@ -517,14 +524,17 @@ function populateEventForm(eventData) {
         document.getElementById('eventDurationMinutes').value = minutes;
     }
     
-    // Populate attendees if they exist
-    if (eventData.attendees) {
+    // Populate attendees if they exist - preserve original selection
+    if (eventData.attendees && eventData.attendees.length > 0) {
         selectedAttendees = eventData.attendees || [];
-        // Trigger event type change to populate attendees properly
-        const eventTypeSelect = document.getElementById('eventType');
-        if (eventTypeSelect.value) {
-            handleEventTypeChange({ target: eventTypeSelect });
-        }
+        updateAttendeeCount();
+        
+        // Populate the attendees list with ALL users but only check the original attendees
+        populateAttendeesListForEdit(availableUsers, selectedAttendees);
+    } else {
+        // No attendees were selected originally
+        selectedAttendees = [];
+        updateAttendeeCount();
     }
     
     // Populate tasks if they exist
@@ -1161,6 +1171,54 @@ function populateAttendeesList(users, template) {
         checkbox.checked = selectedAttendees.includes(user.uid);
         
         // All checkboxes are always editable
+        checkbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                if (!selectedAttendees.includes(user.uid)) {
+                    selectedAttendees.push(user.uid);
+                }
+            } else {
+                selectedAttendees = selectedAttendees.filter(id => id !== user.uid);
+            }
+            updateAttendeeCount();
+        });
+        
+        const label = document.createElement('label');
+        label.htmlFor = `attendee-${user.uid}`;
+        label.textContent = user.displayName;
+        
+        checkboxDiv.appendChild(checkbox);
+        checkboxDiv.appendChild(label);
+        checkboxList.appendChild(checkboxDiv);
+    });
+    
+    attendeesList.appendChild(checkboxList);
+}
+
+// Populate attendees list for edit mode - preserves original selection
+function populateAttendeesListForEdit(allUsers, originalAttendees) {
+    const attendeesList = document.getElementById('attendeesList');
+    attendeesList.innerHTML = '';
+    
+    // Add header
+    const header = document.createElement('h4');
+    header.textContent = 'Attendees';
+    attendeesList.appendChild(header);
+    
+    // Create checkbox list
+    const checkboxList = document.createElement('div');
+    checkboxList.className = 'attendee-checkboxes';
+    
+    allUsers.forEach(user => {
+        const checkboxDiv = document.createElement('div');
+        checkboxDiv.className = 'attendee-checkbox';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `attendee-${user.uid}`;
+        checkbox.value = user.uid;
+        // Check only if user was in the original attendees
+        checkbox.checked = originalAttendees.includes(user.uid);
+        
         checkbox.addEventListener('change', (e) => {
             if (e.target.checked) {
                 if (!selectedAttendees.includes(user.uid)) {
