@@ -19,9 +19,29 @@ async function loadUserTasks() {
     if (!tasksList) return;
     
     try {
-        // Query tasks assigned to current user
+        // First, get current user's family ID
+        let familyMemberIds = [currentUser.uid];
+        
+        const currentUserDoc = await db.collection('users').doc(currentUser.uid).get();
+        if (currentUserDoc.exists) {
+            const userData = currentUserDoc.data();
+            
+            // If user has a family, get all family members
+            if (userData.familyId) {
+                const familyMembersSnapshot = await db.collection('users')
+                    .where('familyId', '==', userData.familyId)
+                    .get();
+                
+                familyMemberIds = [];
+                familyMembersSnapshot.forEach(doc => {
+                    familyMemberIds.push(doc.id);
+                });
+            }
+        }
+        
+        // Query tasks for all family members
         const tasksSnapshot = await db.collection('tasks')
-            .where('assignedTo', '==', currentUser.uid)
+            .where('assignedTo', 'in', familyMemberIds)
             .orderBy('eventDate', 'asc')
             .get();
         
@@ -31,7 +51,7 @@ async function loadUserTasks() {
             tasksList.innerHTML = `
                 <div class="no-tasks">
                     <span class="material-icons" style="font-size: 3rem; color: var(--text-secondary); opacity: 0.5;">task_alt</span>
-                    <p style="color: var(--text-secondary); margin-top: 1rem;">No tasks assigned to you</p>
+                    <p style="color: var(--text-secondary); margin-top: 1rem;">No tasks assigned to you or your family</p>
                 </div>
             `;
             return;
@@ -57,6 +77,10 @@ function createTaskCard(task) {
     card.dataset.status = task.status || 'pending';
     card.dataset.taskId = task.id; // Add task ID for URL navigation
     
+    // Check if this is a family member's task
+    const isOwnTask = task.assignedTo === currentUser.uid;
+    const assigneeName = isOwnTask ? 'Your task' : `${task.assignedUserName}'s task`;
+    
     // Format date
     const taskDate = new Date(task.eventDate);
     const isOverdue = taskDate < new Date() && task.status === 'pending';
@@ -65,6 +89,7 @@ function createTaskCard(task) {
     card.innerHTML = `
         <div class="task-info">
             <h4>${task.title}</h4>
+            <p class="task-assignee" style="font-size: 0.875rem; color: ${isOwnTask ? '#2196F3' : '#9C27B0'}; font-weight: 500;">${assigneeName}</p>
             <p class="task-event">${task.eventTitle || 'Event'}</p>
             <p class="task-date ${isOverdue ? 'overdue' : ''}">
                 <span class="material-icons">event</span>
@@ -92,6 +117,9 @@ function createTaskCard(task) {
     // Add style for overdue
     if (isOverdue) {
         card.style.borderLeftColor = '#FF5252';
+    } else if (!isOwnTask) {
+        // Add different border color for family member tasks
+        card.style.borderLeftColor = '#9C27B0';
     }
     
     return card;

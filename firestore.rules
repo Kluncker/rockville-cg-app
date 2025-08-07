@@ -30,6 +30,16 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
+    // Helper function to check if users are in the same family
+    function isFamilyMember(userId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == 
+        get(/databases/$(database)/documents/users/$(userId)).data.familyId;
+    }
+    
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -55,6 +65,7 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
         (resource.data.assignedTo == request.auth.uid || 
          resource.data.createdBy == request.auth.uid || 
+         isFamilyMember(resource.data.assignedTo) ||
          isAdminOrLeader());
       allow delete: if isAdminOrLeader();
     }

@@ -127,29 +127,64 @@ async function loadUserData() {
             userName.textContent = currentUser.displayName || 'User';
         }
         
-        // Get user role from Firestore or create user document if it doesn't exist
+        // Get user role from Firestore or create/migrate user document if needed
         try {
             const userDoc = await db.collection('users').doc(currentUser.uid).get();
+            
             if (userDoc.exists) {
                 const userData = userDoc.data();
                 currentUser.role = userData.role || 'member';
                 
-                // Update lastLogin
-                await db.collection('users').doc(currentUser.uid).update({
+                // Update lastLogin and photo if changed
+                const updates = {
                     lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                };
+                
+                // Update photo URL if it has changed
+                if (currentUser.photoURL && currentUser.photoURL !== userData.photoURL) {
+                    updates.photoURL = currentUser.photoURL;
+                }
+                
+                await db.collection('users').doc(currentUser.uid).update(updates);
             } else {
-                // Create user document for existing authenticated user
-                console.log('Creating user document for existing user:', currentUser.uid);
-                await db.collection('users').doc(currentUser.uid).set({
-                    displayName: currentUser.displayName || 'Unknown User',
-                    email: currentUser.email,
-                    photoURL: currentUser.photoURL || null,
-                    role: 'member', // Default role
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                currentUser.role = 'member';
+                // Check if there's a prepopulated document using email-based ID
+                const emailBasedId = currentUser.email.replace('@', '_').replace('.', '_');
+                const prepopulatedDoc = await db.collection('users').doc(emailBasedId).get();
+                
+                if (prepopulatedDoc.exists) {
+                    // Migrate prepopulated data to proper UID-based document
+                    console.log('Migrating prepopulated user document:', currentUser.email);
+                    const prepopulatedData = prepopulatedDoc.data();
+                    
+                    // Create new document with proper UID
+                    await db.collection('users').doc(currentUser.uid).set({
+                        ...prepopulatedData,
+                        displayName: currentUser.displayName || prepopulatedData.displayName,
+                        email: currentUser.email,
+                        photoURL: currentUser.photoURL || null,
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                        migratedFrom: emailBasedId,
+                        migratedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Delete old email-based document
+                    await db.collection('users').doc(emailBasedId).delete();
+                    
+                    currentUser.role = prepopulatedData.role || 'member';
+                    console.log('✅ Successfully migrated user data with family:', prepopulatedData.familyId);
+                } else {
+                    // Create new user document from scratch
+                    console.log('Creating new user document:', currentUser.uid);
+                    await db.collection('users').doc(currentUser.uid).set({
+                        displayName: currentUser.displayName || 'Unknown User',
+                        email: currentUser.email,
+                        photoURL: currentUser.photoURL || null,
+                        role: 'member', // Default role
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    currentUser.role = 'member';
+                }
             }
         } catch (error) {
             console.error('Error loading user data:', error);
