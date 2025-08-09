@@ -51,3 +51,5 @@ scripts/prepopulate_events.py
 scripts/delete_events.py
 scripts/add_gender_hangouts.py
 scripts/remove_duplicate_events.py
+scripts/fix_duplicate_users.py
+scripts/update_user_roles.py

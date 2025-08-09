@@ -149,32 +149,51 @@ async function loadUserData() {
             } else {
                 // Check if there's a prepopulated document using email-based ID
                 const emailBasedId = currentUser.email.replace('@', '_').replace('.', '_');
-                const prepopulatedDoc = await db.collection('users').doc(emailBasedId).get();
+                console.log('[Migration] Looking for prepopulated doc:', emailBasedId);
                 
-                if (prepopulatedDoc.exists) {
-                    // Migrate prepopulated data to proper UID-based document
-                    console.log('Migrating prepopulated user document:', currentUser.email);
-                    const prepopulatedData = prepopulatedDoc.data();
+                try {
+                    const prepopulatedDoc = await db.collection('users').doc(emailBasedId).get();
+                    console.log('[Migration] Prepopulated doc exists:', prepopulatedDoc.exists);
                     
-                    // Create new document with proper UID
-                    await db.collection('users').doc(currentUser.uid).set({
-                        ...prepopulatedData,
-                        displayName: currentUser.displayName || prepopulatedData.displayName,
-                        email: currentUser.email,
-                        photoURL: currentUser.photoURL || null,
-                        lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-                        migratedFrom: emailBasedId,
-                        migratedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    // Delete old email-based document
-                    await db.collection('users').doc(emailBasedId).delete();
-                    
-                    currentUser.role = prepopulatedData.role || 'member';
-                    console.log('✅ Successfully migrated user data with family:', prepopulatedData.familyId);
-                } else {
-                    // Create new user document from scratch
-                    console.log('Creating new user document:', currentUser.uid);
+                    if (prepopulatedDoc.exists) {
+                        // Migrate prepopulated data to proper UID-based document
+                        console.log('[Migration] Starting migration for:', currentUser.email);
+                        const prepopulatedData = prepopulatedDoc.data();
+                        console.log('[Migration] Prepopulated data keys:', Object.keys(prepopulatedData));
+                        
+                        // Create new document with proper UID
+                        await db.collection('users').doc(currentUser.uid).set({
+                            ...prepopulatedData,
+                            displayName: currentUser.displayName || prepopulatedData.displayName,
+                            email: currentUser.email,
+                            photoURL: currentUser.photoURL || null,
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                            migratedFrom: emailBasedId,
+                            migratedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        
+                        // Delete old email-based document
+                        await db.collection('users').doc(emailBasedId).delete();
+                        
+                        currentUser.role = prepopulatedData.role || 'member';
+                        console.log('✅ Successfully migrated user data with family:', prepopulatedData.familyId);
+                    } else {
+                        // Create new user document from scratch
+                        console.log('[Migration] No prepopulated doc found, creating new user');
+                        await db.collection('users').doc(currentUser.uid).set({
+                            displayName: currentUser.displayName || 'Unknown User',
+                            email: currentUser.email,
+                            photoURL: currentUser.photoURL || null,
+                            role: 'member', // Default role
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        currentUser.role = 'member';
+                    }
+                } catch (migrationError) {
+                    console.error('[Migration] Error during migration:', migrationError);
+                    // Create basic user document as fallback
+                    console.log('[Migration] Falling back to creating basic user document');
                     await db.collection('users').doc(currentUser.uid).set({
                         displayName: currentUser.displayName || 'Unknown User',
                         email: currentUser.email,
@@ -454,6 +473,12 @@ function showEventModal(date = null, eventData = null) {
             populateEventForm(eventData);
             // Store event ID for update
             form.dataset.eventId = eventData.id;
+            
+            // Set up event type change listener for editing events too
+            const editEventTypeSelect = document.getElementById('eventType');
+            if (editEventTypeSelect) {
+                editEventTypeSelect.addEventListener('change', handleEventTypeChangeForEdit);
+            }
         } else {
             // Add mode
             modalTitle.textContent = 'Add New Event';
@@ -524,18 +549,13 @@ function populateEventForm(eventData) {
         document.getElementById('eventDurationMinutes').value = minutes;
     }
     
-    // Populate attendees if they exist - preserve original selection
-    if (eventData.attendees && eventData.attendees.length > 0) {
-        selectedAttendees = eventData.attendees || [];
-        updateAttendeeCount();
-        
-        // Populate the attendees list with ALL users but only check the original attendees
-        populateAttendeesListForEdit(availableUsers, selectedAttendees);
-    } else {
-        // No attendees were selected originally
-        selectedAttendees = [];
-        updateAttendeeCount();
-    }
+    // Always populate attendees list with ALL users for editing
+    selectedAttendees = eventData.attendees || [];
+    updateAttendeeCount();
+    
+    // Always show the attendees list with ALL users
+    populateAttendeesListForEdit(availableUsers, selectedAttendees);
+    document.getElementById('attendeesList').style.display = 'block';
     
     // Populate tasks if they exist
     if (eventData.tasks && eventData.tasks.length > 0) {
@@ -1311,6 +1331,58 @@ async function handleEventTypeChange(e) {
     updateAttendeeCount();
     
     // Always populate with ALL users, but check the merged selection
+    populateAttendeesList(availableUsers, template);
+}
+
+// Handle event type change for edit mode - repopulates attendees based on new type
+async function handleEventTypeChangeForEdit(e) {
+    const eventType = e.target.value;
+    
+    if (!eventType) {
+        // Keep existing attendees if no type selected
+        updateAttendeeCount();
+        return;
+    }
+    
+    // Map event types to attendee templates
+    const templateMap = {
+        'bible-study': 'everyone',
+        'mens-fellowship': 'men',
+        'womens-fellowship': 'women',
+        'sunday-service': 'everyone',
+        'community': 'everyone'
+    };
+    
+    const template = templateMap[eventType] || 'everyone';
+    
+    // Determine which users should be selected by default based on template
+    let defaultSelectedUsers = [];
+    
+    switch(template) {
+        case 'everyone':
+            defaultSelectedUsers = availableUsers;
+            break;
+        case 'men':
+            defaultSelectedUsers = await getUsersByGender('male');
+            break;
+        case 'women':
+            defaultSelectedUsers = await getUsersByGender('female');
+            break;
+    }
+    
+    // Always include leaders regardless of template
+    const leaders = await getLeaders();
+    const leaderUids = leaders.map(user => user.uid);
+    
+    // Merge default selected users with leaders
+    const mergedUids = [...new Set([...defaultSelectedUsers.map(u => u.uid), ...leaderUids])];
+    selectedAttendees = mergedUids;
+    
+    // Update attendee count
+    updateAttendeeCount();
+    
+    // Show attendees list and populate with ALL users, but check the merged selection
+    document.getElementById('attendeesList').style.display = 'block';
     populateAttendeesList(availableUsers, template);
 }
 
