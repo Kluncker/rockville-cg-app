@@ -73,9 +73,9 @@ const emailTemplates = {
     
     taskAssigned: {
         subject: "New Task Assigned: [TASK_TITLE] - Due [DUE_DATE]",
-        generateHtml: (task, event) => `
+        generateHtml: (task, event, assigneeName, includesFamilyMembers = false) => `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #FF6F00;">New Task Assigned to You</h2>
+                <h2 style="color: #FF6F00;">New Task Assigned to ${assigneeName || "You"}</h2>
                 <h3 style="color: #333;">${task.title}</h3>
                 
                 <div style="background: #FFF3E0; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FF9800;">
@@ -84,6 +84,12 @@ const emailTemplates = {
                     <p><strong>Task Due Date:</strong> ${new Date(task.eventDate).toLocaleDateString()}</p>
                     ${task.description ? `<p><strong>Description:</strong> ${task.description}</p>` : ""}
                 </div>
+                
+                ${includesFamilyMembers ? `
+                <p style="color: #666; font-style: italic; margin: 15px 0;">
+                    <strong>Note:</strong> Family members can respond on behalf of ${assigneeName}.
+                </p>
+                ` : ""}
                 
                 <div style="margin: 20px 0; text-align: center;">
                     <a href="https://rockville-cg-planning.web.app/dashboard.html#task-${task.id}" style="display: inline-block; padding: 12px 24px; background: #FF9800; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Task in Dashboard</a>
@@ -268,17 +274,58 @@ async function getLeaderEmails() {
     return emails;
 }
 
+// Get family member emails
+async function getFamilyMemberEmails(userId) {
+    const db = admin.firestore();
+    const emails = [];
+    
+    // Get the user's family ID
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+        return emails;
+    }
+    
+    const userData = userDoc.data();
+    const familyId = userData.familyId;
+    
+    // If user has no family, return just their email
+    if (!familyId) {
+        if (userData.email) {
+            emails.push(userData.email);
+        }
+        return emails;
+    }
+    
+    // Get all family members
+    const familyMembersSnapshot = await db.collection("users")
+        .where("familyId", "==", familyId)
+        .get();
+    
+    familyMembersSnapshot.forEach(doc => {
+        const memberData = doc.data();
+        if (memberData.email) {
+            emails.push(memberData.email);
+        }
+    });
+    
+    return emails;
+}
+
 // Send task assigned email
-async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, tokens = null) {
+async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, tokens = null, assigneeName = null, familyEmails = []) {
     const template = emailTemplates.taskAssigned;
     
-    if (!assigneeEmail) {
-        console.error("No assignee email provided for task assigned email");
+    if (!assigneeEmail && familyEmails.length === 0) {
+        console.error("No assignee email or family emails provided for task assigned email");
         return { success: false, error: "No assignee email provided" };
     }
     
+    // Use family emails if provided, otherwise just the assignee email
+    const toRecipients = familyEmails.length > 0 ? familyEmails : [assigneeEmail];
+    const includesFamilyMembers = familyEmails.length > 1;
+    
     // Modify the template to include token-based buttons if tokens are provided
-    let htmlContent = template.generateHtml(task, event);
+    let htmlContent = template.generateHtml(task, event, assigneeName, includesFamilyMembers);
     
     if (tokens && tokens.confirmToken && tokens.declineToken) {
         // Replace the dashboard link with direct action buttons
@@ -306,8 +353,8 @@ async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, t
     }
     
     const msg = {
-        to: assigneeEmail,
-        cc: ccRecipients.filter(email => email !== assigneeEmail), // Don't CC the assignee
+        to: toRecipients,
+        cc: ccRecipients.filter(email => !toRecipients.includes(email)), // Don't CC anyone already in To
         from: {
             email: "admin@mosaic-rockville-cg.com",
             name: "Rockville CG App"
@@ -320,7 +367,7 @@ async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, t
     
     try {
         await sgMail.send(msg);
-        console.log("Task assigned email sent to:", assigneeEmail, "CC:", ccRecipients.length, "recipients");
+        console.log("Task assigned email sent to:", toRecipients.length, "recipients (family members), CC:", ccRecipients.length, "recipients");
         return { success: true };
     } catch (error) {
         console.error("Error sending task assigned email:", error);
@@ -436,5 +483,6 @@ module.exports = {
     getAttendeeEmails,
     getLeaderEmails,
     getEventCreatorEmail,
-    getTaskEmailCCRecipients
+    getTaskEmailCCRecipients,
+    getFamilyMemberEmails
 };
