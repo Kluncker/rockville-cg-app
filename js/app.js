@@ -942,7 +942,7 @@ async function clearAllNotifications() {
 }
 
 // Show event preview modal
-function showEventPreviewModal(date, events) {
+async function showEventPreviewModal(date, events) {
     const modal = document.getElementById('eventPreviewModal');
     const previewDate = document.getElementById('previewDate');
     const eventPreviewList = document.getElementById('eventPreviewList');
@@ -967,9 +967,26 @@ function showEventPreviewModal(date, events) {
     // Sort events by time
     events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
     
-    // Create event cards
+    // Fetch tasks for all events
+    const eventIds = events.map(event => event.id);
+    const tasksSnapshot = await db.collection('tasks')
+        .where('eventId', 'in', eventIds)
+        .get();
+    
+    // Group tasks by event ID
+    const tasksByEventId = {};
+    tasksSnapshot.forEach(doc => {
+        const task = { id: doc.id, ...doc.data() };
+        if (!tasksByEventId[task.eventId]) {
+            tasksByEventId[task.eventId] = [];
+        }
+        tasksByEventId[task.eventId].push(task);
+    });
+    
+    // Create event cards with task data
     events.forEach(event => {
-        const eventCard = createPreviewEventCard(event);
+        const eventTasks = tasksByEventId[event.id] || [];
+        const eventCard = createPreviewEventCard(event, eventTasks);
         eventPreviewList.appendChild(eventCard);
     });
     
@@ -992,7 +1009,7 @@ function hideEventPreviewModal() {
 }
 
 // Create preview event card
-function createPreviewEventCard(event) {
+function createPreviewEventCard(event, tasks = []) {
     const card = document.createElement('div');
     card.className = `preview-event-card ${event.type}`;
     
@@ -1012,6 +1029,36 @@ function createPreviewEventCard(event) {
     // Check calendar sync status
     const hasCalendarEvent = !!event.googleCalendarEventId;
     const hasDiscrepancy = event.calendarSyncStatus?.hasDiscrepancy || false;
+    
+    // Process task statistics
+    const taskStats = {
+        confirmed: tasks.filter(t => t.status === 'confirmed').length,
+        pending: tasks.filter(t => t.status === 'pending').length,
+        declined: tasks.filter(t => t.status === 'declined').length,
+        total: tasks.length
+    };
+    
+    // Create task status HTML
+    const taskStatusHTML = tasks.length > 0 ? `
+        <div class="preview-event-tasks">
+            <div class="task-status-summary">
+                <span class="material-icons">task_alt</span>
+                <span class="task-summary-text">Tasks: </span>
+                ${taskStats.confirmed > 0 ? `<span class="task-status-count confirmed">${taskStats.confirmed} confirmed</span>` : ''}
+                ${taskStats.pending > 0 ? `<span class="task-status-count pending">${taskStats.pending} pending</span>` : ''}
+                ${taskStats.declined > 0 ? `<span class="task-status-count declined">${taskStats.declined} declined</span>` : ''}
+            </div>
+            <div class="task-details-list">
+                ${tasks.map(task => `
+                    <div class="task-detail-item">
+                        <span class="task-assignee">${task.assignedUserName || 'Unknown'}</span>
+                        <span class="task-title">${task.title}</span>
+                        <span class="task-status-badge ${task.status}">${task.status}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
     
     card.innerHTML = `
         <div class="preview-event-header">
@@ -1044,6 +1091,7 @@ function createPreviewEventCard(event) {
             </div>
         </div>
         ${event.description ? `<p class="preview-event-description">${event.description}</p>` : ''}
+        ${taskStatusHTML}
         ${hasDiscrepancy && event.calendarSyncStatus?.discrepancyDetails ? `
             <div class="discrepancy-details">
                 <p class="discrepancy-title">Sync Issues:</p>

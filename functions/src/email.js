@@ -315,13 +315,21 @@ async function getFamilyMemberEmails(userId) {
 async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, tokens = null, assigneeName = null, familyEmails = []) {
     const template = emailTemplates.taskAssigned;
     
-    if (!assigneeEmail && familyEmails.length === 0) {
-        console.error("No assignee email or family emails provided for task assigned email");
-        return { success: false, error: "No assignee email provided" };
+    // Determine recipients - use family emails if available, otherwise fall back to assignee email
+    let toRecipients = [];
+    
+    if (familyEmails.length > 0) {
+        toRecipients = familyEmails;
+    } else if (assigneeEmail) {
+        toRecipients = [assigneeEmail];
     }
     
-    // Use family emails if provided, otherwise just the assignee email
-    const toRecipients = familyEmails.length > 0 ? familyEmails : [assigneeEmail];
+    // If still no recipients, we can't send the email
+    if (toRecipients.length === 0) {
+        console.error("No email recipients available for task assigned email");
+        return { success: false, error: "No email recipients available" };
+    }
+    
     const includesFamilyMembers = familyEmails.length > 1;
     
     // Modify the template to include token-based buttons if tokens are provided
