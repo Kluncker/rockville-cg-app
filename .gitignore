@@ -40,10 +40,5 @@ build/
 *.private.json
 
 # User data
-scripts/allowedUsers.json
-scripts/update_user_gender.py
-scripts/test_sendgrid.js
+scripts/*
 functions/src/key.json
-scripts/update_user_families.py
-scripts/prepopulate_all_users.py
-scripts/delete_test_user.py
