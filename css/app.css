@@ -1437,6 +1437,109 @@ body.loading .main-content {
     }
 }
 
+/* Task Status Display in Event Preview */
+.preview-event-tasks {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-light);
+}
+
+.task-status-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.task-status-summary .material-icons {
+    font-size: 18px;
+    color: var(--primary-color);
+}
+
+.task-summary-text {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.task-status-count {
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.task-status-count.confirmed {
+    background: rgba(76, 175, 80, 0.15);
+    color: #2E7D32;
+}
+
+.task-status-count.pending {
+    background: rgba(255, 193, 7, 0.15);
+    color: #F57C00;
+}
+
+.task-status-count.declined {
+    background: rgba(244, 67, 54, 0.15);
+    color: #C62828;
+}
+
+.task-details-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.task-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.task-assignee {
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 120px;
+}
+
+.task-title {
+    flex: 1;
+    color: var(--text-secondary);
+}
+
+.task-status-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.task-status-badge.confirmed {
+    background: #D4EDDA;
+    color: #155724;
+}
+
+.task-status-badge.pending {
+    background: #FFF3CD;
+    color: #856404;
+}
+
+.task-status-badge.declined {
+    background: #F8D7DA;
+    color: #721C24;
+}
+
+.task-status-badge.completed {
+    background: #E8F5E9;
+    color: #2E7D32;
+}
+
 /* Location Autocomplete Styles */
 .location-autocomplete-dropdown {
     position: absolute;

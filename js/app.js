@@ -149,32 +149,51 @@ async function loadUserData() {
             } else {
                 // Check if there's a prepopulated document using email-based ID
                 const emailBasedId = currentUser.email.replace('@', '_').replace('.', '_');
-                const prepopulatedDoc = await db.collection('users').doc(emailBasedId).get();
+                console.log('[Migration] Looking for prepopulated doc:', emailBasedId);
                 
-                if (prepopulatedDoc.exists) {
-                    // Migrate prepopulated data to proper UID-based document
-                    console.log('Migrating prepopulated user document:', currentUser.email);
-                    const prepopulatedData = prepopulatedDoc.data();
+                try {
+                    const prepopulatedDoc = await db.collection('users').doc(emailBasedId).get();
+                    console.log('[Migration] Prepopulated doc exists:', prepopulatedDoc.exists);
                     
-                    // Create new document with proper UID
-                    await db.collection('users').doc(currentUser.uid).set({
-                        ...prepopulatedData,
-                        displayName: currentUser.displayName || prepopulatedData.displayName,
-                        email: currentUser.email,
-                        photoURL: currentUser.photoURL || null,
-                        lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-                        migratedFrom: emailBasedId,
-                        migratedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    // Delete old email-based document
-                    await db.collection('users').doc(emailBasedId).delete();
-                    
-                    currentUser.role = prepopulatedData.role || 'member';
-                    console.log('✅ Successfully migrated user data with family:', prepopulatedData.familyId);
-                } else {
-                    // Create new user document from scratch
-                    console.log('Creating new user document:', currentUser.uid);
+                    if (prepopulatedDoc.exists) {
+                        // Migrate prepopulated data to proper UID-based document
+                        console.log('[Migration] Starting migration for:', currentUser.email);
+                        const prepopulatedData = prepopulatedDoc.data();
+                        console.log('[Migration] Prepopulated data keys:', Object.keys(prepopulatedData));
+                        
+                        // Create new document with proper UID
+                        await db.collection('users').doc(currentUser.uid).set({
+                            ...prepopulatedData,
+                            displayName: currentUser.displayName || prepopulatedData.displayName,
+                            email: currentUser.email,
+                            photoURL: currentUser.photoURL || null,
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+                            migratedFrom: emailBasedId,
+                            migratedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        
+                        // Delete old email-based document
+                        await db.collection('users').doc(emailBasedId).delete();
+                        
+                        currentUser.role = prepopulatedData.role || 'member';
+                        console.log('✅ Successfully migrated user data with family:', prepopulatedData.familyId);
+                    } else {
+                        // Create new user document from scratch
+                        console.log('[Migration] No prepopulated doc found, creating new user');
+                        await db.collection('users').doc(currentUser.uid).set({
+                            displayName: currentUser.displayName || 'Unknown User',
+                            email: currentUser.email,
+                            photoURL: currentUser.photoURL || null,
+                            role: 'member', // Default role
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        currentUser.role = 'member';
+                    }
+                } catch (migrationError) {
+                    console.error('[Migration] Error during migration:', migrationError);
+                    // Create basic user document as fallback
+                    console.log('[Migration] Falling back to creating basic user document');
                     await db.collection('users').doc(currentUser.uid).set({
                         displayName: currentUser.displayName || 'Unknown User',
                         email: currentUser.email,
@@ -454,6 +473,12 @@ function showEventModal(date = null, eventData = null) {
             populateEventForm(eventData);
             // Store event ID for update
             form.dataset.eventId = eventData.id;
+            
+            // Set up event type change listener for editing events too
+            const editEventTypeSelect = document.getElementById('eventType');
+            if (editEventTypeSelect) {
+                editEventTypeSelect.addEventListener('change', handleEventTypeChangeForEdit);
+            }
         } else {
             // Add mode
             modalTitle.textContent = 'Add New Event';
@@ -524,18 +549,13 @@ function populateEventForm(eventData) {
         document.getElementById('eventDurationMinutes').value = minutes;
     }
     
-    // Populate attendees if they exist - preserve original selection
-    if (eventData.attendees && eventData.attendees.length > 0) {
-        selectedAttendees = eventData.attendees || [];
-        updateAttendeeCount();
-        
-        // Populate the attendees list with ALL users but only check the original attendees
-        populateAttendeesListForEdit(availableUsers, selectedAttendees);
-    } else {
-        // No attendees were selected originally
-        selectedAttendees = [];
-        updateAttendeeCount();
-    }
+    // Always populate attendees list with ALL users for editing
+    selectedAttendees = eventData.attendees || [];
+    updateAttendeeCount();
+    
+    // Always show the attendees list with ALL users
+    populateAttendeesListForEdit(availableUsers, selectedAttendees);
+    document.getElementById('attendeesList').style.display = 'block';
     
     // Populate tasks if they exist
     if (eventData.tasks && eventData.tasks.length > 0) {
@@ -922,7 +942,7 @@ async function clearAllNotifications() {
 }
 
 // Show event preview modal
-function showEventPreviewModal(date, events) {
+async function showEventPreviewModal(date, events) {
     const modal = document.getElementById('eventPreviewModal');
     const previewDate = document.getElementById('previewDate');
     const eventPreviewList = document.getElementById('eventPreviewList');
@@ -947,9 +967,26 @@ function showEventPreviewModal(date, events) {
     // Sort events by time
     events.sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
     
-    // Create event cards
+    // Fetch tasks for all events
+    const eventIds = events.map(event => event.id);
+    const tasksSnapshot = await db.collection('tasks')
+        .where('eventId', 'in', eventIds)
+        .get();
+    
+    // Group tasks by event ID
+    const tasksByEventId = {};
+    tasksSnapshot.forEach(doc => {
+        const task = { id: doc.id, ...doc.data() };
+        if (!tasksByEventId[task.eventId]) {
+            tasksByEventId[task.eventId] = [];
+        }
+        tasksByEventId[task.eventId].push(task);
+    });
+    
+    // Create event cards with task data
     events.forEach(event => {
-        const eventCard = createPreviewEventCard(event);
+        const eventTasks = tasksByEventId[event.id] || [];
+        const eventCard = createPreviewEventCard(event, eventTasks);
         eventPreviewList.appendChild(eventCard);
     });
     
@@ -972,7 +1009,7 @@ function hideEventPreviewModal() {
 }
 
 // Create preview event card
-function createPreviewEventCard(event) {
+function createPreviewEventCard(event, tasks = []) {
     const card = document.createElement('div');
     card.className = `preview-event-card ${event.type}`;
     
@@ -992,6 +1029,36 @@ function createPreviewEventCard(event) {
     // Check calendar sync status
     const hasCalendarEvent = !!event.googleCalendarEventId;
     const hasDiscrepancy = event.calendarSyncStatus?.hasDiscrepancy || false;
+    
+    // Process task statistics
+    const taskStats = {
+        confirmed: tasks.filter(t => t.status === 'confirmed').length,
+        pending: tasks.filter(t => t.status === 'pending').length,
+        declined: tasks.filter(t => t.status === 'declined').length,
+        total: tasks.length
+    };
+    
+    // Create task status HTML
+    const taskStatusHTML = tasks.length > 0 ? `
+        <div class="preview-event-tasks">
+            <div class="task-status-summary">
+                <span class="material-icons">task_alt</span>
+                <span class="task-summary-text">Tasks: </span>
+                ${taskStats.confirmed > 0 ? `<span class="task-status-count confirmed">${taskStats.confirmed} confirmed</span>` : ''}
+                ${taskStats.pending > 0 ? `<span class="task-status-count pending">${taskStats.pending} pending</span>` : ''}
+                ${taskStats.declined > 0 ? `<span class="task-status-count declined">${taskStats.declined} declined</span>` : ''}
+            </div>
+            <div class="task-details-list">
+                ${tasks.map(task => `
+                    <div class="task-detail-item">
+                        <span class="task-assignee">${task.assignedUserName || 'Unknown'}</span>
+                        <span class="task-title">${task.title}</span>
+                        <span class="task-status-badge ${task.status}">${task.status}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
     
     card.innerHTML = `
         <div class="preview-event-header">
@@ -1024,6 +1091,7 @@ function createPreviewEventCard(event) {
             </div>
         </div>
         ${event.description ? `<p class="preview-event-description">${event.description}</p>` : ''}
+        ${taskStatusHTML}
         ${hasDiscrepancy && event.calendarSyncStatus?.discrepancyDetails ? `
             <div class="discrepancy-details">
                 <p class="discrepancy-title">Sync Issues:</p>
@@ -1311,6 +1379,58 @@ async function handleEventTypeChange(e) {
     updateAttendeeCount();
     
     // Always populate with ALL users, but check the merged selection
+    populateAttendeesList(availableUsers, template);
+}
+
+// Handle event type change for edit mode - repopulates attendees based on new type
+async function handleEventTypeChangeForEdit(e) {
+    const eventType = e.target.value;
+    
+    if (!eventType) {
+        // Keep existing attendees if no type selected
+        updateAttendeeCount();
+        return;
+    }
+    
+    // Map event types to attendee templates
+    const templateMap = {
+        'bible-study': 'everyone',
+        'mens-fellowship': 'men',
+        'womens-fellowship': 'women',
+        'sunday-service': 'everyone',
+        'community': 'everyone'
+    };
+    
+    const template = templateMap[eventType] || 'everyone';
+    
+    // Determine which users should be selected by default based on template
+    let defaultSelectedUsers = [];
+    
+    switch(template) {
+        case 'everyone':
+            defaultSelectedUsers = availableUsers;
+            break;
+        case 'men':
+            defaultSelectedUsers = await getUsersByGender('male');
+            break;
+        case 'women':
+            defaultSelectedUsers = await getUsersByGender('female');
+            break;
+    }
+    
+    // Always include leaders regardless of template
+    const leaders = await getLeaders();
+    const leaderUids = leaders.map(user => user.uid);
+    
+    // Merge default selected users with leaders
+    const mergedUids = [...new Set([...defaultSelectedUsers.map(u => u.uid), ...leaderUids])];
+    selectedAttendees = mergedUids;
+    
+    // Update attendee count
+    updateAttendeeCount();
+    
+    // Show attendees list and populate with ALL users, but check the merged selection
+    document.getElementById('attendeesList').style.display = 'block';
     populateAttendeesList(availableUsers, template);
 }
 

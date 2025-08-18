@@ -287,7 +287,10 @@ exports.onTaskCreated = onDocumentCreated({
             return null;
         }
         
-        const assigneeEmail = assigneeDoc.data().email;
+        const assigneeData = assigneeDoc.data();
+        const assigneeEmail = assigneeData.email;
+        const assigneeName = assigneeData.displayName || assigneeData.email || "Unknown";
+        
         if (!assigneeEmail) {
             console.error("Assignee has no email:", task.assignedTo);
             return null;
@@ -305,6 +308,9 @@ exports.onTaskCreated = onDocumentCreated({
         // Get CC recipients (leaders + event creator)
         const ccRecipients = await email.getTaskEmailCCRecipients(event.createdBy);
         
+        // Get family member emails
+        const familyEmails = await email.getFamilyMemberEmails(task.assignedTo);
+        
         // Generate action tokens for this task
         const tokens = await generateTaskActionTokens(taskId, task.assignedTo, assigneeEmail);
         
@@ -314,7 +320,9 @@ exports.onTaskCreated = onDocumentCreated({
             event,
             assigneeEmail,
             ccRecipients,
-            tokens
+            tokens,
+            assigneeName,
+            familyEmails
         );
         
         if (result.success) {
@@ -429,7 +437,10 @@ exports.onTaskUpdated = onDocumentUpdated({
                 return null;
             }
             
-            const assigneeEmail = assigneeDoc.data().email;
+            const assigneeData = assigneeDoc.data();
+            const assigneeEmail = assigneeData.email;
+            const assigneeName = assigneeData.displayName || assigneeData.email || "Unknown";
+            
             if (!assigneeEmail) {
                 console.error("New assignee has no email:", taskAfter.assignedTo);
                 return null;
@@ -447,12 +458,18 @@ exports.onTaskUpdated = onDocumentUpdated({
             // Get CC recipients (leaders + event creator)
             const ccRecipients = await email.getTaskEmailCCRecipients(event.createdBy);
             
+            // Get family member emails for new assignee
+            const familyEmails = await email.getFamilyMemberEmails(taskAfter.assignedTo);
+            
             // Send task assigned email to new assignee
             const result = await email.sendTaskAssignedEmail(
                 { ...taskAfter, id: taskId },
                 event,
                 assigneeEmail,
-                ccRecipients
+                ccRecipients,
+                null,  // no tokens for reassignment
+                assigneeName,
+                familyEmails
             );
             
             if (result.success) {
