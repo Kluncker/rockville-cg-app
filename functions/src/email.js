@@ -387,17 +387,71 @@ async function sendTaskAssignedEmail(task, event, assigneeEmail, ccRecipients, t
 }
 
 // Send task reminder email
-async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, timeFrame) {
+async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, timeFrame, tokens = null, assigneeName = null, familyEmails = []) {
     const template = emailTemplates.taskReminder;
     
-    if (!assigneeEmail) {
-        console.error("No assignee email provided for task reminder email");
-        return { success: false, error: "No assignee email provided" };
+    // Determine recipients - use family emails if available, otherwise fall back to assignee email
+    let toRecipients = [];
+    
+    if (familyEmails.length > 0) {
+        toRecipients = familyEmails;
+    } else if (assigneeEmail) {
+        toRecipients = [assigneeEmail];
+    }
+    
+    // If still no recipients, we can't send the email
+    if (toRecipients.length === 0) {
+        console.error("No email recipients available for task reminder email");
+        return { success: false, error: "No email recipients available" };
+    }
+    
+    const includesFamilyMembers = familyEmails.length > 1;
+    
+    // Generate HTML content
+    let htmlContent = template.generateHtml(task, event, timeFrame);
+    
+    // If tokens are provided and task is pending, replace the dashboard button with action buttons
+    if (tokens && tokens.confirmToken && tokens.declineToken && task.status === "pending") {
+        const confirmUrl = `https://rockville-cg-planning.web.app/api/task/confirm?token=${tokens.confirmToken}`;
+        const declineUrl = `https://rockville-cg-planning.web.app/api/task/decline?token=${tokens.declineToken}`;
+        
+        const actionButtons = `
+                <div style="margin: 20px 0; display: flex; gap: 12px; justify-content: center;">
+                    <a href="${confirmUrl}" style="display: inline-block; padding: 12px 24px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        ✓ Accept Task
+                    </a>
+                    <a href="${declineUrl}" style="display: inline-block; padding: 12px 24px; background: #ff5252; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                        ✗ Decline Task
+                    </a>
+                </div>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Or <a href="https://rockville-cg-planning.web.app/dashboard.html#task-${task.id}">manage in dashboard</a>
+                </p>`;
+        
+        // Replace the existing button section for pending tasks
+        htmlContent = htmlContent.replace(
+            /<div style="margin: 20px 0;">[\s\S]*?<\/div>\s*<p style="color: #666;">Please confirm this task if you haven't already\.<\/p>/,
+            actionButtons
+        );
+    }
+    
+    // Add family member note if applicable
+    if (includesFamilyMembers && task.status === "pending") {
+        const familyNote = `
+                <p style="color: #666; font-style: italic; margin: 15px 0;">
+                    <strong>Note:</strong> Family members can respond on behalf of ${assigneeName || "the assignee"}.
+                </p>`;
+        
+        // Insert the family note before the action buttons
+        htmlContent = htmlContent.replace(
+            /(<div style="margin: 20px 0;">)/,
+            familyNote + '$1'
+        );
     }
     
     const msg = {
-        to: assigneeEmail,
-        cc: ccRecipients.filter(email => email !== assigneeEmail), // Don't CC the assignee
+        to: toRecipients,
+        cc: ccRecipients.filter(email => !toRecipients.includes(email)), // Don't CC anyone already in To
         from: {
             email: "admin@mosaic-rockville-cg.com",
             name: "Rockville CG App"
@@ -405,12 +459,12 @@ async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, t
         subject: template.subject
             .replace("[TIME_FRAME]", timeFrame)
             .replace("[TASK_TITLE]", task.title),
-        html: template.generateHtml(task, event, timeFrame)
+        html: htmlContent
     };
     
     try {
         await sgMail.send(msg);
-        console.log(`Task reminder (${timeFrame}) email sent to:`, assigneeEmail, "CC:", ccRecipients.length, "recipients");
+        console.log(`Task reminder (${timeFrame}) email sent to:`, toRecipients.length, "recipients (family members), CC:", ccRecipients.length, "recipients");
         return { success: true };
     } catch (error) {
         console.error("Error sending task reminder email:", error);
