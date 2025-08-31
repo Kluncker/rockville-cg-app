@@ -645,7 +645,7 @@ exports.sendTaskReminders = onSchedule({
             { days: 0, label: "Day of", field: "dayOfSent" }
         ];
         
-        // Get all pending tasks
+        // Get all pending and confirmed tasks (exclude declined)
         const tasksSnapshot = await db.collection("tasks")
             .where("status", "in", ["pending", "confirmed"])
             .get();
@@ -676,13 +676,26 @@ exports.sendTaskReminders = onSchedule({
                     // Check if already sent
                     const emailReminders = task.emailReminders || {};
                     if (!emailReminders[interval.field]) {
-                        // Get assignee email
+                        // Get assignee data
                         const assigneeDoc = await db.collection("users").doc(task.assignedTo).get();
-                        const assigneeEmail = assigneeDoc.data()?.email;
+                        if (!assigneeDoc.exists) continue;
+                        
+                        const assigneeData = assigneeDoc.data();
+                        const assigneeEmail = assigneeData.email;
+                        const assigneeName = assigneeData.displayName || assigneeData.email || "Unknown";
                         
                         if (assigneeEmail) {
                             // Get CC recipients
                             const ccRecipients = await email.getTaskEmailCCRecipients(event.createdBy);
+                            
+                            // Get family member emails
+                            const familyEmails = await email.getFamilyMemberEmails(task.assignedTo);
+                            
+                            // Generate tokens for pending tasks
+                            let tokens = null;
+                            if (task.status === "pending") {
+                                tokens = await generateTaskActionTokens(task.id, task.assignedTo, assigneeEmail);
+                            }
                             
                             // Send reminder email
                             const result = await email.sendTaskReminderEmail(
@@ -690,7 +703,10 @@ exports.sendTaskReminders = onSchedule({
                                 event,
                                 assigneeEmail,
                                 ccRecipients,
-                                interval.label
+                                interval.label,
+                                tokens,
+                                assigneeName,
+                                familyEmails
                             );
                             
                             if (result.success) {
