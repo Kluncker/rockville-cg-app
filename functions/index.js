@@ -245,21 +245,138 @@ async function ensureUserDocument(uid, authToken) {
     const userDoc = await userRef.get();
     
     if (!userDoc.exists) {
-        // Create new user document
-        await userRef.set({
-            displayName: authToken.name || "Unknown User",
-            email: authToken.email,
-            photoURL: authToken.picture || null,
-            role: "member", // Default role
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastLogin: admin.firestore.FieldValue.serverTimestamp()
-        });
-        console.log(`Created user document for ${authToken.email}`);
+        // Before creating a new user, check if there's a prepopulated user with the same email
+        const email = authToken.email?.toLowerCase();
+        if (email) {
+            // Look for existing prepopulated users with this email
+            const existingUsersQuery = await db.collection("users")
+                .where("email", "==", email)
+                .limit(1)
+                .get();
+            
+            if (!existingUsersQuery.empty) {
+                // Found a prepopulated user - merge it
+                const existingUserDoc = existingUsersQuery.docs[0];
+                const existingUserId = existingUserDoc.id;
+                const existingUserData = existingUserDoc.data();
+                
+                console.log(`Found prepopulated user ${existingUserId} for ${email}, merging...`);
+                
+                // Prepare merged data
+                const mergedData = {
+                    displayName: authToken.name || existingUserData.displayName || "Unknown User",
+                    email: authToken.email,
+                    photoURL: authToken.picture || existingUserData.photoURL || null,
+                    role: existingUserData.role || "member",
+                    createdAt: existingUserData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: admin.firestore.FieldValue.serverTimestamp(),
+                    prepopulated: existingUserData.prepopulated || true
+                };
+                
+                // Copy over other important fields if they exist
+                const fieldsToMerge = ["gender", "familyId"];
+                fieldsToMerge.forEach(field => {
+                    if (existingUserData[field]) {
+                        mergedData[field] = existingUserData[field];
+                    }
+                });
+                
+                // Create the new user document with merged data
+                await userRef.set(mergedData);
+                
+                // Update any references from old ID to new ID
+                await updateUserReferences(existingUserId, uid);
+                
+                // Delete the old prepopulated user document
+                await existingUserDoc.ref.delete();
+                
+                console.log(`Successfully merged prepopulated user ${existingUserId} into ${uid}`);
+            } else {
+                // No existing user found, create new
+                await userRef.set({
+                    displayName: authToken.name || "Unknown User",
+                    email: authToken.email,
+                    photoURL: authToken.picture || null,
+                    role: "member", // Default role
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    lastLogin: admin.firestore.FieldValue.serverTimestamp()
+                });
+                console.log(`Created new user document for ${authToken.email}`);
+            }
+        }
     } else {
         // Update lastLogin
         await userRef.update({
             lastLogin: admin.firestore.FieldValue.serverTimestamp()
         });
+    }
+}
+
+// Helper function to update user references when merging
+async function updateUserReferences(oldUserId, newUserId) {
+    let batch = db.batch();
+    let batchCount = 0;
+    
+    try {
+        // Update task assignments
+        const tasksQuery = await db.collection("tasks")
+            .where("assignedTo", "==", oldUserId)
+            .get();
+        
+        tasksQuery.forEach(doc => {
+            batch.update(doc.ref, { assignedTo: newUserId });
+            batchCount++;
+            
+            if (batchCount >= 400) {
+                batch.commit();
+                batch = db.batch();
+                batchCount = 0;
+            }
+        });
+        
+        // Update event attendees
+        const eventsQuery = await db.collection("events")
+            .where("attendees", "array-contains", oldUserId)
+            .get();
+        
+        eventsQuery.forEach(doc => {
+            const attendees = doc.data().attendees;
+            const updatedAttendees = attendees.map(id => id === oldUserId ? newUserId : id);
+            batch.update(doc.ref, { attendees: updatedAttendees });
+            batchCount++;
+            
+            if (batchCount >= 400) {
+                batch.commit();
+                batch = db.batch();
+                batchCount = 0;
+            }
+        });
+        
+        // Update event creators
+        const creatorEventsQuery = await db.collection("events")
+            .where("createdBy", "==", oldUserId)
+            .get();
+        
+        creatorEventsQuery.forEach(doc => {
+            batch.update(doc.ref, { createdBy: newUserId });
+            batchCount++;
+            
+            if (batchCount >= 400) {
+                batch.commit();
+                batch = db.batch();
+                batchCount = 0;
+            }
+        });
+        
+        // Commit any remaining batch operations
+        if (batchCount > 0) {
+            await batch.commit();
+        }
+        
+        console.log(`Updated references from ${oldUserId} to ${newUserId}`);
+        
+    } catch (error) {
+        console.error("Error updating user references:", error);
     }
 }
 
@@ -276,6 +393,12 @@ exports.onTaskCreated = onDocumentCreated({
     // Skip if no assignee
     if (!task.assignedTo) {
         console.log("Task created without assignee, skipping email");
+        return null;
+    }
+    
+    // Check if assignment email was already sent (for bulk creation scenarios)
+    if (task.emailReminders?.assignmentSent === true) {
+        console.log("Assignment email already marked as sent, skipping");
         return null;
     }
     
@@ -515,6 +638,7 @@ exports.sendTaskReminders = onSchedule({
         
         // Define reminder intervals
         const reminderIntervals = [
+            { days: 28, label: "4 weeks", field: "fourWeekSent" },
             { days: 21, label: "3 weeks", field: "threeWeekSent" },
             { days: 14, label: "2 weeks", field: "twoWeekSent" },
             { days: 7, label: "1 week", field: "oneWeekSent" },
