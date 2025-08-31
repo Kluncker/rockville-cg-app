@@ -445,7 +445,7 @@ async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, t
         // Insert the family note before the action buttons
         htmlContent = htmlContent.replace(
             /(<div style="margin: 20px 0;">)/,
-            familyNote + '$1'
+            familyNote + "$1"
         );
     }
     
