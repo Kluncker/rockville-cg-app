@@ -1075,6 +1075,7 @@ async function sendTaskDeclinedEmail(task, event, decliningUser, recipients) {
                 
                 <div style="background: #ffebee; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ff5252;">
                     <p><strong>Event:</strong> ${event.title}</p>
+                    <p><strong>Event Date:</strong> ${new Date(event.date).toLocaleDateString()}</p>
                     <p><strong>Task:</strong> ${task.title}</p>
                     <p><strong>Declined By:</strong> ${decliningUser.displayName || decliningUser.email}</p>
                     <p><strong>Declined At:</strong> ${new Date().toLocaleString()}</p>
