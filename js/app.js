@@ -530,7 +530,7 @@ function hideEventModal() {
 }
 
 // Populate event form for editing
-function populateEventForm(eventData) {
+async function populateEventForm(eventData) {
     if (!eventData) return;
     
     // Populate basic fields
@@ -557,11 +557,20 @@ function populateEventForm(eventData) {
     populateAttendeesListForEdit(availableUsers, selectedAttendees);
     document.getElementById('attendeesList').style.display = 'block';
     
-    // Populate tasks if they exist
-    if (eventData.tasks && eventData.tasks.length > 0) {
-        eventData.tasks.forEach(task => {
-            addTaskInput(task);
-        });
+    // Fetch tasks from the tasks collection
+    try {
+        const tasksSnapshot = await db.collection('tasks')
+            .where('eventId', '==', eventData.id)
+            .get();
+        
+        if (!tasksSnapshot.empty) {
+            tasksSnapshot.forEach(doc => {
+                const task = { id: doc.id, ...doc.data() };
+                addTaskInput(task);
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching tasks for event:', error);
     }
 }
 
@@ -570,6 +579,11 @@ function addTaskInput(taskData = null) {
     const taskInputs = document.getElementById('taskInputs');
     const taskGroup = document.createElement('div');
     taskGroup.className = 'task-input-group';
+    
+    // Store task ID if editing existing task
+    if (taskData?.id) {
+        taskGroup.dataset.taskId = taskData.id;
+    }
     
     taskGroup.innerHTML = `
         <input type="text" placeholder="Task description" value="${taskData?.title || ''}" required>
@@ -691,37 +705,103 @@ async function handleEventSubmit(e) {
             // Update existing event
             await db.collection('events').doc(eventId).update(formData);
             
-            // Delete existing tasks for this event
+            // Handle task updates intelligently
             const existingTasksSnapshot = await db.collection('tasks')
                 .where('eventId', '==', eventId)
                 .get();
             
+            // Create maps for comparison
+            const existingTasksMap = new Map();
+            existingTasksSnapshot.forEach(doc => {
+                existingTasksMap.set(doc.id, { id: doc.id, ...doc.data() });
+            });
+            
+            // Get current task inputs from form
+            const taskGroups = document.querySelectorAll('.task-input-group');
+            const currentTaskIds = new Set();
+            
+            // Process each task input
+            for (const taskGroup of taskGroups) {
+                const taskTitle = taskGroup.querySelector('input').value;
+                const assignedTo = taskGroup.querySelector('select').value;
+                const taskId = taskGroup.dataset.taskId;
+                
+                if (taskTitle && assignedTo) {
+                    const assignedUser = availableUsers.find(u => u.uid === assignedTo);
+                    
+                    if (taskId && existingTasksMap.has(taskId)) {
+                        // Update existing task
+                        currentTaskIds.add(taskId);
+                        const existingTask = existingTasksMap.get(taskId);
+                        
+                        // Only update if something changed
+                        if (existingTask.title !== taskTitle || existingTask.assignedTo !== assignedTo) {
+                            const updateData = {
+                                title: taskTitle,
+                                eventTitle: formData.title,
+                                eventDate: formData.date,
+                                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            };
+                            
+                            // If assignee changed, update assignee and reset email reminders
+                            if (existingTask.assignedTo !== assignedTo) {
+                                updateData.assignedTo = assignedTo;
+                                updateData.assignedUserName = assignedUser ? assignedUser.displayName : 'Unknown';
+                                // Note: The Cloud Function onTaskUpdated will handle sending new assignment email
+                            }
+                            
+                            await db.collection('tasks').doc(taskId).update(updateData);
+                        }
+                    } else {
+                        // Create new task
+                        const newTaskRef = await db.collection('tasks').add({
+                            title: taskTitle,
+                            assignedTo: assignedTo,
+                            assignedUserName: assignedUser ? assignedUser.displayName : 'Unknown',
+                            status: 'pending',
+                            eventId: eventId,
+                            eventTitle: formData.title,
+                            eventDate: formData.date,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            createdBy: currentUser.uid,
+                            notificationSent: false
+                        });
+                        currentTaskIds.add(newTaskRef.id);
+                    }
+                }
+            }
+            
+            // Delete tasks that were removed
             const batch = db.batch();
             existingTasksSnapshot.forEach(doc => {
-                batch.delete(doc.ref);
+                if (!currentTaskIds.has(doc.id)) {
+                    batch.delete(doc.ref);
+                }
             });
-            await batch.commit();
+            if (batch._ops && batch._ops.length > 0) {
+                await batch.commit();
+            }
             
         } else {
             // Create new event
             const eventRef = await db.collection('events').add(formData);
             eventIdToUse = eventRef.id;
-        }
-        
-        // Create tasks (for both new and updated events)
-        for (const task of formData.tasks) {
-            // Get assigned user's display name for the task
-            const assignedUser = availableUsers.find(u => u.uid === task.assignedTo);
-            await db.collection('tasks').add({
-                ...task,
-                assignedUserName: assignedUser ? assignedUser.displayName : 'Unknown',
-                eventId: eventIdToUse,
-                eventTitle: formData.title,
-                eventDate: formData.date,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                createdBy: currentUser.uid,
-                notificationSent: false
-            });
+            
+            // Create tasks for new event
+            for (const task of formData.tasks) {
+                // Get assigned user's display name for the task
+                const assignedUser = availableUsers.find(u => u.uid === task.assignedTo);
+                await db.collection('tasks').add({
+                    ...task,
+                    assignedUserName: assignedUser ? assignedUser.displayName : 'Unknown',
+                    eventId: eventIdToUse,
+                    eventTitle: formData.title,
+                    eventDate: formData.date,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdBy: currentUser.uid,
+                    notificationSent: false
+                });
+            }
         }
         
         showNotification(isEditing ? 'Event updated successfully!' : 'Event created successfully!', 'success');
