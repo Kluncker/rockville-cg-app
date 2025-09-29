@@ -106,13 +106,14 @@ const emailTemplates = {
     
     taskReminder: {
         subject: "Task Reminder ([TIME_FRAME]): [TASK_TITLE]",
-        generateHtml: (task, event, timeFrame) => {
+        generateHtml: (task, event, timeFrame, assigneeName) => {
             const daysUntil = Math.ceil((new Date(task.eventDate) - new Date()) / (1000 * 60 * 60 * 24));
             const urgencyColor = timeFrame === "1 week" || timeFrame === "Day of" ? "#FF5252" : "#FF9800";
             
             return `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: ${urgencyColor};">Task Reminder - ${timeFrame}</h2>
+                ${assigneeName ? `<p style="font-size: 16px; color: #666; margin: 10px 0;"><strong>Assigned to:</strong> ${assigneeName}</p>` : ""}
                 <h3 style="color: #333;">${task.title}</h3>
                 
                 <div style="background: #FFF3E0; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
@@ -408,7 +409,7 @@ async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, t
     const includesFamilyMembers = familyEmails.length > 1;
     
     // Generate HTML content
-    let htmlContent = template.generateHtml(task, event, timeFrame);
+    let htmlContent = template.generateHtml(task, event, timeFrame, assigneeName);
     
     // If tokens are provided and task is pending, replace the dashboard button with action buttons
     if (tokens && tokens.confirmToken && tokens.declineToken && task.status === "pending") {
