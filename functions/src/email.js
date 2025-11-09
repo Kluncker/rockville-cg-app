@@ -406,6 +406,9 @@ async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, t
         return { success: false, error: "No email recipients available" };
     }
     
+    // Filter out Esther French from CC recipients for reminder emails only
+    const filteredCCRecipients = ccRecipients.filter(email => email !== "frenchesther@gmail.com");
+    
     const includesFamilyMembers = familyEmails.length > 1;
     
     // Generate HTML content
@@ -452,7 +455,7 @@ async function sendTaskReminderEmail(task, event, assigneeEmail, ccRecipients, t
     
     const msg = {
         to: toRecipients,
-        cc: ccRecipients.filter(email => !toRecipients.includes(email)), // Don't CC anyone already in To
+        cc: filteredCCRecipients.filter(email => !toRecipients.includes(email)), // Don't CC anyone already in To
         from: {
             email: "admin@mosaic-rockville-cg.com",
             name: "Rockville CG App"
