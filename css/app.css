@@ -6,6 +6,7 @@
     --womens-fellowship: #E91E63; /* Pink */
     --sunday-service: #F9A825; /* Amber */
     --community: #5E35B1; /* Deep Purple */
+    --youth-group: #00BCD4; /* Cyan */
     
     /* App Colors */
     --header-bg: rgba(255, 255, 255, 0.95);
@@ -277,6 +278,7 @@ section::before {
 .legend-color.womens-fellowship { background: var(--womens-fellowship); }
 .legend-color.sunday-service { background: var(--sunday-service); }
 .legend-color.community { background: var(--community); }
+.legend-color.youth-group { background: var(--youth-group); }
 
 .current-month {
     font-size: 1rem;
@@ -400,6 +402,7 @@ section::before {
 .event-block.womens-fellowship { background: var(--womens-fellowship); }
 .event-block.sunday-service { background: var(--sunday-service); }
 .event-block.community { background: var(--community); }
+.event-block.youth-group { background: var(--youth-group); }
 
 /* Ensure readability on today's gradient background */
 .calendar-day.today .event-block {
@@ -556,6 +559,7 @@ section::before {
 .event-card.womens-fellowship::after { background: var(--womens-fellowship); }
 .event-card.sunday-service::after { background: var(--sunday-service); }
 .event-card.community::after { background: var(--community); }
+.event-card.youth-group::after { background: var(--youth-group); }
 
 .event-card:hover {
     transform: translateY(-5px);
@@ -600,6 +604,11 @@ section::before {
 .event-type-badge.community {
     background: rgba(186, 104, 200, 0.2);
     color: #6A1B9A;
+}
+
+.event-type-badge.youth-group {
+    background: rgba(0, 188, 212, 0.2);
+    color: #0097A7;
 }
 
 /* Modal Styles */
@@ -953,6 +962,7 @@ section::before {
 .preview-event-card.womens-fellowship { border-left-color: var(--womens-fellowship); }
 .preview-event-card.sunday-service { border-left-color: var(--sunday-service); }
 .preview-event-card.community { border-left-color: var(--community); }
+.preview-event-card.youth-group { border-left-color: var(--youth-group); }
 
 .preview-event-header {
     display: flex;
@@ -1009,6 +1019,11 @@ section::before {
 .event-type-label.community {
     background: rgba(94, 53, 177, 0.15);
     color: var(--community);
+}
+
+.event-type-label.youth-group {
+    background: rgba(0, 188, 212, 0.15);
+    color: var(--youth-group);
 }
 
 .preview-event-time {
