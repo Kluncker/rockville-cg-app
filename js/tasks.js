@@ -39,9 +39,15 @@ async function loadUserTasks() {
             }
         }
         
-        // Query tasks for all family members
+        // Get today's date (start of day) for filtering out past events
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString().split('T')[0];
+        
+        // Query tasks for all family members, only for events that haven't passed
         const tasksSnapshot = await db.collection('tasks')
             .where('assignedTo', 'in', familyMemberIds)
+            .where('eventDate', '>=', todayStr)
             .orderBy('eventDate', 'asc')
             .get();
         
