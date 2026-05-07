@@ -583,14 +583,17 @@ exports.onTaskUpdated = onDocumentUpdated({
             
             // Get family member emails for new assignee
             const familyEmails = await email.getFamilyMemberEmails(taskAfter.assignedTo);
-            
+
+            // Generate action tokens so the new assignee gets Accept/Decline buttons in the email
+            const tokens = await generateTaskActionTokens(taskId, taskAfter.assignedTo, assigneeEmail);
+
             // Send task assigned email to new assignee
             const result = await email.sendTaskAssignedEmail(
                 { ...taskAfter, id: taskId },
                 event,
                 assigneeEmail,
                 ccRecipients,
-                null,  // no tokens for reassignment
+                tokens,
                 assigneeName,
                 familyEmails
             );
