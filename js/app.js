@@ -88,6 +88,7 @@ function initializeFirebase() {
                     // Add delay before redirecting to see errors
                     setTimeout(async () => {
                         // Sign out unauthorized user
+                        sessionStorage.removeItem('cg_auth_ok');
                         await auth.signOut();
                         window.location.href = 'index.html';
                     }, 5000); // 5 second delay
@@ -366,6 +367,7 @@ function setupEventListeners() {
         logoutBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             try {
+                sessionStorage.removeItem('cg_auth_ok');
                 await auth.signOut();
                 window.location.href = 'index.html';
             } catch (error) {

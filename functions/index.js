@@ -24,7 +24,8 @@ exports.checkUserAuthorization = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const context = request;
@@ -97,7 +98,8 @@ exports.getPlaceSuggestions = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const context = request;
@@ -175,7 +177,8 @@ exports.getPlaceDetails = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const context = request;
@@ -745,7 +748,8 @@ exports.deleteCalendarEventWithUserAuth = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const data = request.data;
@@ -830,7 +834,8 @@ exports.confirmTaskByToken = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const { token } = request.data;
@@ -933,7 +938,8 @@ exports.declineTaskByToken = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const { token } = request.data;
@@ -1131,7 +1137,8 @@ exports.createCalendarEventWithUserAuth = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const data = request.data;
@@ -1235,7 +1242,8 @@ exports.syncCalendarEventWithUserAuth = onCall({
         "http://localhost:5000",
         "https://wz-rockville-cg-app.web.app",
         "https://wz-rockville-cg-app.firebaseapp.com",
-        "https://rockville-cg-planning.web.app"
+        "https://rockville-cg-planning.web.app",
+        /^https:\/\/\d+-mobile-dev\.cluster-mz5xodzpfbcigutbmakepmp5um\.cloudworkstations\.dev$/
     ]
 }, async (request) => {
     const data = request.data;

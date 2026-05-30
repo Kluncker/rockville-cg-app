@@ -310,16 +310,85 @@ body {
     color: #999;
 }
 
+/* Auth-check overlay — shown over the welcome card while the splash page
+   verifies an already-signed-in user via the checkUserAuthorization Cloud
+   Function. Without this, the cold-start (2-15s) looks like a frozen page. */
+.auth-check-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 30px;
+    z-index: 20;
+    animation: auth-check-fade-in 0.2s ease;
+}
+
+.auth-check-overlay[hidden] {
+    display: none;
+}
+
+.auth-check-content {
+    text-align: center;
+    color: var(--text-primary);
+    padding: 0 20px;
+}
+
+.auth-check-spinner {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 18px;
+    border: 4px solid rgba(255, 215, 0, 0.25);
+    border-top-color: var(--accent-coral);
+    border-radius: 50%;
+    animation: auth-check-spin 0.9s linear infinite;
+}
+
+.auth-check-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-coral));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.auth-check-message {
+    font-size: 0.95rem;
+    color: #666;
+    font-weight: 300;
+    max-width: 320px;
+}
+
+.sign-in-button[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@keyframes auth-check-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes auth-check-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .welcome-card {
         padding: 40px 30px;
     }
-    
+
     .church-name {
         font-size: 2rem;
     }
-    
+
     .welcome-title {
         font-size: 1.5rem;
     }

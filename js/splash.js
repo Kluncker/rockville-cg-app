@@ -91,27 +91,68 @@ const firebaseConfig = {
 // Initialize Firebase (will be done when config is added)
 let app, auth, db;
 
+// Session-scoped cache: skips the checkUserAuthorization round-trip on
+// subsequent splash visits within the same browser session. Cleared on
+// sign-out (here and in app.js) and on any failed authorization check.
+const AUTH_CACHE_KEY = 'cg_auth_ok';
+
+function showAuthCheckOverlay(message) {
+    const overlay = document.getElementById('authCheckOverlay');
+    if (overlay) overlay.hidden = false;
+    if (message) {
+        const msgEl = document.getElementById('authCheckMessage');
+        if (msgEl) msgEl.textContent = message;
+    }
+    const btn = document.getElementById('googleSignIn');
+    if (btn) btn.disabled = true;
+}
+
+function hideAuthCheckOverlay() {
+    const overlay = document.getElementById('authCheckOverlay');
+    if (overlay) overlay.hidden = true;
+    const btn = document.getElementById('googleSignIn');
+    if (btn) btn.disabled = false;
+}
+
 function initializeFirebase() {
     if (firebaseConfig.apiKey) {
         app = firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
         db = firebase.firestore();
-        
+
         // Check if user is already signed in
         auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                console.log('🔐 User already signed in:', user.email);
-                // Check if user is allowed before redirecting
-                const isAllowed = await isEmailAllowed(user.email);
-                if (isAllowed) {
-                    // User is signed in and allowed, redirect to dashboard
-                    transitionToDashboard();
-                } else {
-                    // User is signed in but not allowed
-                    console.error('⛔ Already signed-in user not authorized!');
-                    await auth.signOut();
-                    showNotification('Access denied. You are not authorized to use this app.', 'error');
-                }
+            if (!user) return;
+
+            console.log('🔐 User already signed in:', user.email);
+            showAuthCheckOverlay();
+
+            // Fast path: skip the Cloud Function if we already verified this
+            // uid in this session. Server-side rules still gate every read.
+            if (sessionStorage.getItem(AUTH_CACHE_KEY) === user.uid) {
+                console.log('⚡ Using cached authorization for', user.email);
+                transitionToDashboard();
+                return;
+            }
+
+            // Soft UX cue if the cold start runs long. No abort — we still wait.
+            const slowTimer = setTimeout(() => {
+                const msgEl = document.getElementById('authCheckMessage');
+                if (msgEl) msgEl.textContent = 'Still verifying… this can take a moment on first load.';
+            }, 8000);
+
+            const isAllowed = await isEmailAllowed(user.email);
+            clearTimeout(slowTimer);
+
+            if (isAllowed) {
+                sessionStorage.setItem(AUTH_CACHE_KEY, user.uid);
+                transitionToDashboard();
+            } else {
+                sessionStorage.removeItem(AUTH_CACHE_KEY);
+                hideAuthCheckOverlay();
+                console.error('⛔ Already signed-in user not authorized!');
+                await auth.signOut();
+                showNotification('Access denied. You are not authorized to use this app.', 'error');
             }
         });
     }
@@ -155,19 +196,24 @@ async function signInWithGoogle() {
         const provider = new firebase.auth.GoogleAuthProvider();
         const result = await auth.signInWithPopup(provider);
         const user = result.user;
-        
+
+        // Popup closed; the cloud-function check is next and can be slow.
+        showAuthCheckOverlay('Signing you in…');
+
         // Check if user is allowed
         const isAllowed = await isEmailAllowed(user.email);
         if (!isAllowed) {
             // Sign out the user immediately
+            sessionStorage.removeItem(AUTH_CACHE_KEY);
+            hideAuthCheckOverlay();
             await auth.signOut();
             showNotification('Access denied. You are not authorized to use this app. Please contact an administrator.', 'error');
             return;
         }
-        
+
         // Check if user document exists
         const userDoc = await db.collection('users').doc(user.uid).get();
-        
+
         if (!userDoc.exists) {
             // Create new user document
             await db.collection('users').doc(user.uid).set({
@@ -184,10 +230,11 @@ async function signInWithGoogle() {
                 lastLogin: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
-        
-        // Transition to dashboard
+
+        sessionStorage.setItem(AUTH_CACHE_KEY, user.uid);
         transitionToDashboard();
     } catch (error) {
+        hideAuthCheckOverlay();
         console.error('Error signing in:', error);
         showNotification('Error signing in. Please try again.', 'error');
     }
